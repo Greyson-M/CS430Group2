@@ -400,11 +400,24 @@ const DistributorView = ({ resources }) => {
 // --- Main App ---
 
 export default function App() {
+  //////////////////////////
+  //This is just here to demonstrate the API connection. You can remove it later.
+  //This is generally how we will fetch data from the backend
+  const [currentTime, setCurrentTime] = useState(0);
+  useEffect(() => {
+    fetch('/api/time').then(res => res.json()).then(data => setCurrentTime(data.time));
+  }, []);
+
+  console.log(currentTime); // For debugging: check if time is being fetched correctly
+///////////////////////////
+
+
   const [role, setRole] = useState('recipient'); // 'recipient' or 'distributor'
   const [language, setLanguage] = useState('English');
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans">
+      <p>Current Time: {new Date(currentTime * 1000).toLocaleString()}, <b>This is just here for demonstration purposes.</b></p>  
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
