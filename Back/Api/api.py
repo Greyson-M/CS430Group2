@@ -130,3 +130,97 @@ def create_item():
         "message": "Item created successfully", 
         "id": str(result.inserted_id)
     }), 201
+
+#----------- Stubs for future endpoints -----------#
+@app.route('/api/login', methods=['POST'])
+def login():
+    '''
+    Login a user.
+    Expects a JSON payload with 'username' and 'password'.
+    Example payload:
+    {
+        "username": "vendor123",
+        "password": "securepassword"
+    }
+    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
+    '''
+    return jsonify({"message": "Login endpoint not implemented yet"}), 501
+
+@app.route('/api/items', methods=['GET'])
+def get_items():
+    '''
+    Get a list of items from the database.
+    This endpoint will eventually support filtering options (e.g., by vendor, by item name, etc.).
+    For now, it just returns all items in the database.
+    '''
+    return jsonify({"message": "Get items endpoint not implemented yet"}), 501
+
+@app.route('/api/items/<item_id>', methods=['PUT'])
+def update_item(item_id):
+    '''
+    Update the details of an item.
+    Expects a JSON payload with the fields to update (e.g., 'item_name', 'fields', etc.).
+    Example payload:
+    {
+        "item_name": "Updated Item Name",
+        "fields": {
+            "field1": "new value1",
+            "field2": "new value2"
+        }
+    }
+    Returns a success message if the item was updated successfully.
+    '''
+    return jsonify({"message": "Update item endpoint not implemented yet"}), 501
+
+@app.route('/api/items/<item_id>', methods=['DELETE'])
+def delete_item(item_id):
+    '''
+    Delete an item from the database.
+    Returns a success message if the item was deleted successfully.
+    '''
+    return jsonify({"message": "Delete item endpoint not implemented yet"}), 501
+
+@app.route('/api/user/<user_id>', methods=['GET'])
+def get_user_info(user_id):
+    '''
+    Get the information of a user.
+    Returns the user's information if the user exists.
+    '''
+    return jsonify({"message": "Get user info endpoint not implemented yet"}), 501
+
+@app.route('/api/user/<user_id>', methods=['PUT'])
+def update_user_info(user_id):
+    '''
+    Update the information of a user.
+    Expects a JSON payload with the fields to update (e.g., 'username', 'password', etc.).
+    Returns a success message if the user's information was updated successfully.
+    '''
+    return jsonify({"message": "Update user info endpoint not implemented yet"}), 501
+
+@app.route('/api/user/<user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    '''
+    Delete a user from the database.
+    Returns a success message if the user was deleted successfully.
+    '''
+    return jsonify({"message": "Delete user endpoint not implemented yet"}), 501
+
+@app.route('/api/test_cases')
+def test_cases():
+    '''
+    This endpoint is for testing purposes. Testing guy can add test cases here to test the database connection and functionality of the endpoints.
+    '''
+
+    #EXAMPLE TEST CASE: Insert a test item into the database and return its ID
+    test_item = {"name": "Test yeah", "fields": {"field1": "value1", "field2": "value2"}}
+    result = mongo.db.items.insert_one(test_item)
+    # search for the new item in the database and return it
+    inserted_item = mongo.db.items.find_one({"_id": result.inserted_id})
+    return jsonify({
+        "message": "Test case executed successfully", 
+        "inserted_item": {
+            "id": str(inserted_item["_id"]),
+            "name": inserted_item["name"],
+            "fields": inserted_item["fields"]
+        }
+    }), 200
