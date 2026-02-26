@@ -57,7 +57,6 @@ Implement Get User Info, Update User Info, and Delete User Endpoints
 
 Need to not store passwords in plaintext, eventually we should implement password hashing for security.
 
-
 '''
 @app.route('/api/register', methods=['POST'])
 def register():

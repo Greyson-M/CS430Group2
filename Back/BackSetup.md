@@ -47,16 +47,22 @@
 ## Mongo Atlas Setup
 
 0. Check out the BackendTest branch for most recent test code and run `pip install -r requirements.txt` to install the new libraries. You need the venv active.
-1. Create a MongoDB Atlas account
-2. Navigate to the "Database" section click "cluster0" and then click "Connect"
+1. Create a MongoDB Atlas account.
+2. Send your email address to the team so we can add you to the MongoDB Atlas project. You should receive an email invitation to join the project.
+3. Navigate to the "Database" section click "cluster0" and then click "Connect"
 ![Mongo Atlas Connect](/Back/instructions/connect_new.png)
-3. Choose "Connect your application"
-4. Copy the connection string
+4. Choose "Connect your application"
+5. For the driver option, select "Python", the version should not matter
+6. Copy the connection string and hold on to it for now.
 ![Mongo Atlas Connection String](/Back/instructions/copy_uri.png)
-5. Replace the `MONGO_URI` value in the `.env` file with the connection string, making sure to replace `<password>` with your actual password for the MongoDB user, and add app after the final slash.
+7. In this same pop-up, scroll to the bottom and click 'access your database users'.
+![Mongo Atlas user setup](/Back/instructions/dbusers.png)
+8. On the left sidebar, click 'ip access list' and add your current IP address to the allow list. This will allow your local machine to connect to the MongoDB cluster.
+![Mongo Atlas IP Access List](/Back/instructions/ipaccess.png)
+9. Replace the `MONGO_URI` value in the `.env` file with the connection string, making sure to replace `<password>` with your actual password for the MongoDB user, and add app after the final slash.
 ![Mongo Atlas Update .env](/Back/instructions/update_uri.png)
-6. Restart the Flask server to apply the changes.
-7. Try navigating to `http://localhost:5000/api/test-db` to test the database connection. You should see a message indicating whether the connection was successful or if there was an error.
+10. Restart the Flask server to apply the changes.
+11. Try navigating to `http://localhost:5000/api/test-db` to test the database connection. You should see a message indicating whether the connection was successful or if there was an error.
 
 ## Important Note about dependencies
 
