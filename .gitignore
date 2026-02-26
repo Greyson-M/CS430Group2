@@ -8,3 +8,6 @@ node_modules
 # Python cache files
 __pycache__/
 *.pyc
+
+# Environment variables
+.env
