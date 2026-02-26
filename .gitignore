@@ -6,4 +6,7 @@
 node_modules
 *.env
 Back/Api/.env
+
+# Python
+__pycache__/
 *.pyc
