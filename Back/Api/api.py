@@ -4,6 +4,9 @@ from flask import Flask, request, jsonify
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 from bson.objectid import ObjectId
+from hashlib import sha256
+
+from test_cases import Tester
 
 # 1. Load environment variables from the .env file
 load_dotenv()
@@ -79,12 +82,14 @@ def register():
     password = data.get('password')
     if not all([user_type, username, password]):
         return jsonify({"error": "All fields (user_type, username, password) are required"}), 400
-    
     if user_type not in ['wanters', 'vendors']:
         return jsonify({"error": "user_type must be either 'wanters' or 'vendors'"}), 400
-    
+    #Make sure the username is unique within the collection (I don't think its strictly necessary)
+    if mongo.db[user_type].find_one({"username": username}):
+        return jsonify({"error": "Username already exists"}), 400    
     # Insert into the appropriate collection based on user_type
-    new_user = {"username": username, "password": password}
+    hashed_password = sha256(password.encode()).hexdigest()
+    new_user = {"username": username, "password": hashed_password}
     result = mongo.db[user_type].insert_one(new_user)
     
     return jsonify({
@@ -114,7 +119,7 @@ def create_item():
 
     # Validate that the vendor_id exists in the 'vendors' collection
     if not vendor_id or not mongo.db.vendors.find_one({"_id": ObjectId(vendor_id)}):
-        return jsonify({"error": "Invalid or missing vendor_id"}), 400
+        return jsonify({"error": "Invalid or missing vendor_id. Make sure that the vendor exists."}), 400
 
     name = data.get('item_name')
     fields = data.get('fields', {}) # Defaults to an empty object if no fields are provided
@@ -132,20 +137,7 @@ def create_item():
     }), 201
 
 #----------- Stubs for future endpoints -----------#
-@app.route('/api/login', methods=['POST'])
-def login():
-    '''
-    Login a user.
-    Expects a JSON payload with 'username' and 'password'.
-    Example payload:
-    {
-        "username": "vendor123",
-        "password": "securepassword"
-    }
-    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
-    '''
-    return jsonify({"message": "Login endpoint not implemented yet"}), 501
-
+#Inventory crud stubs
 @app.route('/api/items', methods=['GET'])
 def get_items():
     '''
@@ -180,6 +172,38 @@ def delete_item(item_id):
     '''
     return jsonify({"message": "Delete item endpoint not implemented yet"}), 501
 
+# Accounts:
+@app.route('/api/login', methods=['POST'])
+def login():
+    '''
+    Login a user.
+    Expects a JSON payload with 'username' and 'password'.
+    Example payload:
+    {
+        "username": "vendor123",
+        "password": "securepassword"
+    }
+    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
+    '''
+
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    hashed_password = sha256(password.encode()).hexdigest()
+
+    #Authenticate against both collections since we don't know if the user is a wanter or a vendor
+    user = mongo.db.vendors.find_one({"username": username, "password": hashed_password
+    }) or mongo.db.wanters.find_one({"username": username, "password": hashed_password})
+    if not user:
+        return jsonify({"error": "Invalid username or password"}), 401
+    else:
+        # Return success message and user ID as token for now
+        return jsonify({
+            "message": "Login successful",
+            "token": str(user["_id"])
+        }), 200
+    
 @app.route('/api/user/<user_id>', methods=['GET'])
 def get_user_info(user_id):
     '''
@@ -210,17 +234,9 @@ def test_cases():
     '''
     This endpoint is for testing purposes. Testing guy can add test cases here to test the database connection and functionality of the endpoints.
     '''
+    
+    # Create the testing client to simulate real HTTP requests
+    client = app.test_client()
 
-    #EXAMPLE TEST CASE: Insert a test item into the database and return its ID
-    test_item = {"name": "Test yeah", "fields": {"field1": "value1", "field2": "value2"}}
-    result = mongo.db.items.insert_one(test_item)
-    # search for the new item in the database and return it
-    inserted_item = mongo.db.items.find_one({"_id": result.inserted_id})
-    return jsonify({
-        "message": "Test case executed successfully", 
-        "inserted_item": {
-            "id": str(inserted_item["_id"]),
-            "name": inserted_item["name"],
-            "fields": inserted_item["fields"]
-        }
-    }), 200
+    TesterObject = Tester(client)
+    return TesterObject.run_all_tests()
