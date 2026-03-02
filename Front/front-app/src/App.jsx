@@ -66,10 +66,11 @@ export default function App() {
 
   const [role, setRole] = useState('recipient'); // 'recipient' or 'distributor'
   const [language, setLanguage] = useState('English');
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
+  const [showSignup, setShowSignup] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans">
-      <p>Current Time: {new Date(currentTime * 1000).toLocaleString()}, <b>This is just here for demonstration purposes.</b></p>  
+    <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -102,33 +103,59 @@ export default function App() {
               Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
             </button>
             
-            <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-slate-600">
+            <button
+              onClick={() => setIsAuthenticated(prev => !prev)} 
+              className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-slate-600"
+            >
               <User size={18} />
-            </div>
+            </button>
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-8 flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input 
-              type="text" 
-              placeholder="Find resources, collection points, or source hubs..." 
-              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all shadow-sm"
-            />
-          </div>
-          <button className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-            <Filter size={18} /> Advanced
-          </button>
-        </div>
+      {isAuthenticated && (
+          <div className="mb-8 flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search 
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" 
+                size={18} 
+              />
+              <input 
+                type="text" 
+                placeholder="Find resources, collection points, or source hubs..." 
+                className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all shadow-sm"
+              />
+            </div>
 
-        {role === 'recipient' ? (
-          <RecipientView resources={MOCK_RESOURCES} tickets={MOCK_TICKETS} receipts={MOCK_RECEIPTS} />
-        ) : (
-          <DistributorView resources={MOCK_RESOURCES} />
-        )}
+            <button className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+              <Filter size={18} /> Advanced
+            </button>
+          </div>
+    )}
+{!isAuthenticated ? (
+  showSignup ? (
+    <Signup 
+      onSignup={() => setIsAuthenticated(true)}
+      onSwitchToLogin={() => setShowSignup(false)}
+    />
+  ) : (
+    <Login 
+      onLogin={() => setIsAuthenticated(true)}
+      onSwitchToSignup={() => setShowSignup(true)}
+    />
+  )
+) : (
+  role === 'recipient' ? (
+    <RecipientView 
+      resources={MOCK_RESOURCES} 
+      tickets={MOCK_TICKETS} 
+      receipts={MOCK_RECEIPTS} 
+    />
+  ) : (
+    <DistributorView resources={MOCK_RESOURCES} />
+  )
+)}
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 py-8 text-center">

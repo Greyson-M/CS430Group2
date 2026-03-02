@@ -35,3 +35,7 @@
 - If you encounter issues with missing packages, delete `node_modules` along with `package-lock.json` and run `npm install` again.
 - Ask a robot
 - Ask team members.
+
+## Account Information
+Username: 123@123
+Password: pass
