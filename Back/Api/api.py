@@ -42,20 +42,19 @@ We currently have the following endpoints implemented:
     This automatically generates a unique ID for each user.
 - Create Item Endpoint: Allows vendors to create new items. The item information is stored in the "items" collection in MongoDB,
     and each item is associated with the vendor that created it via the vendor's ID.
+Implement Get Items Endpoint
+    - This will allow users to retrieve a list of items from the database, potentially with filtering options (e.g., by vendor, by item name, etc.).
+Implement Update Item Endpoint
+    - This will allow vendors to update the details of their items (e.g., change the name, update fields, etc.).
+Implement Delete Item Endpoint
+    - This will allow vendors to delete their items from the database.
+Implement Get User Info, Update User Info, and Delete User Endpoints
+    - These will allow users to retrieve, update, and delete their own information from the database.
 
 TODO: 
 Implement Login Endpoint
 - This will allow users to log in and receive a token for authentication (maybe _id for now, maybe eventually we will implement a more secure token-based system).
-Implement Get Items Endpoint
-- This will allow users to retrieve a list of items from the database, potentially with filtering options (e.g., by vendor, by item name, etc.).
-Implement Update Item Endpoint
-- This will allow vendors to update the details of their items (e.g., change the name, update fields, etc.).
-Implement Delete Item Endpoint
-- This will allow vendors to delete their items from the database.
-Implement Get User Info, Update User Info, and Delete User Endpoints
-- These will allow users to retrieve, update, and delete their own information from the database.
-
-Need to not store passwords in plaintext, eventually we should implement password hashing for security.
+- Need to not store passwords in plaintext, eventually we should implement password hashing for security.
 
 '''
 @app.route('/api/register', methods=['POST'])
@@ -127,7 +126,7 @@ def create_item():
         return jsonify({"error": "Item name is required"}), 400
         
     # Insert into the 'items' collection
-    new_item = {"name": name, "fields": fields}
+    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "fields": fields}
     result = mongo.db.items.insert_one(new_item)
     
     return jsonify({
@@ -144,7 +143,35 @@ def get_items():
     This endpoint will eventually support filtering options (e.g., by vendor, by item name, etc.).
     For now, it just returns all items in the database.
     '''
-    return jsonify({"message": "Get items endpoint not implemented yet"}), 501
+    try:
+        # Optional filters
+        vendor_id = request.args.get('vendor_id')
+        item_name = request.args.get('item_name')
+
+        query = {}
+
+        if vendor_id:
+            try:
+                query['vendor_id'] = ObjectId(vendor_id)
+            except Exception:
+                return jsonify({"error": "Invalid vendor_id format"}), 400
+            
+        if item_name:
+            # Simple case-insensitive partial match
+            query['name'] = {"$regex": item_name, "$options": "i"}
+
+        items_cursor = mongo.db.items.find(query)
+        items = []
+        for item in items_cursor:
+            item['_id'] = str(item['_id'])  # Convert ObjectId to string for JSON serialization
+            # if vendor_id exists
+            if 'vendor_id' in item and item['vendor_id'] is not None:
+                item['vendor_id'] = str(item['vendor_id'])  # Convert ObjectId to string for JSON serialization
+            items.append(item)
+        
+        return jsonify(items), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/items/<item_id>', methods=['PUT'])
 def update_item(item_id):
@@ -161,7 +188,38 @@ def update_item(item_id):
     }
     Returns a success message if the item was updated successfully.
     '''
-    return jsonify({"message": "Update item endpoint not implemented yet"}), 501
+
+    try:
+        try:
+            item_obj_id = ObjectId(item_id)
+        except Exception:
+            return jsonify({"error": "Invalid item_id format"}), 400
+        
+        data = request.get_json() or {}
+
+        update_doc = {}
+        if 'item_name' in data:
+            if not data.get('item_name'):
+                return jsonify({"error": "Item name cannot be empty"}), 400
+            update_doc['name'] = data.get('item_name')
+
+        if 'fields' in data:
+            if not isinstance(data.get('fields'), dict):
+                return jsonify({"error": "Fields must be a JSON object"}), 400
+            update_doc['fields'] = data.get('fields')
+
+        if not update_doc:
+            return jsonify({"error": "No valid fields to update"}), 400
+        
+        result = mongo.db.items.update_one({"_id": item_obj_id}, {"$set": update_doc})
+
+        if result.matched_count == 0:
+            return jsonify({"error": "Item not found"}), 404
+        
+        return jsonify({"message": "Item updated successfully"}), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/items/<item_id>', methods=['DELETE'])
 def delete_item(item_id):
@@ -169,7 +227,21 @@ def delete_item(item_id):
     Delete an item from the database.
     Returns a success message if the item was deleted successfully.
     '''
-    return jsonify({"message": "Delete item endpoint not implemented yet"}), 501
+    try:
+        try:
+            item_obj_id = ObjectId(item_id)
+        except Exception:
+            return jsonify({"error": "Invalid item_id format"}), 400
+        
+        result = mongo.db.items.delete_one({"_id": item_obj_id})
+
+        if result.deleted_count == 0:
+            return jsonify({"error": "Item not found"}), 404
+        
+        return jsonify({"message": "Item deleted successfully"}), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Accounts:
 @app.route('/api/login', methods=['POST'])
@@ -209,7 +281,34 @@ def get_user_info(user_id):
     Get the information of a user.
     Returns the user's information if the user exists.
     '''
-    return jsonify({"message": "Get user info endpoint not implemented yet"}), 501
+    try:
+        try:
+            user_obj_id = ObjectId(user_id)
+        except Exception:
+            return jsonify({"error": "Invalid user_id format"}), 400
+        
+        # Search for the user in both collections
+        user = mongo.db.vendors.find_one({"_id": user_obj_id}) or mongo.db.wanters.find_one({"_id": user_obj_id})
+        
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Convert ObjectId to string for JSON serialization
+        user['_id'] = str(user['_id'])
+        # Never return password hashes
+        if 'password' in user:
+            del user['password']
+        
+        # Add a helpful field for client-side
+        if mongo.db.vendors.find_one({"_id": user_obj_id}):
+            user['user_type'] = 'vendors'
+        else:
+            user['user_type'] = 'wanters'
+        
+        return jsonify(user), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/user/<user_id>', methods=['PUT'])
 def update_user_info(user_id):
@@ -218,7 +317,55 @@ def update_user_info(user_id):
     Expects a JSON payload with the fields to update (e.g., 'username', 'password', etc.).
     Returns a success message if the user's information was updated successfully.
     '''
-    return jsonify({"message": "Update user info endpoint not implemented yet"}), 501
+    
+    try:
+        try:
+            user_obj_id = ObjectId(user_id)
+        except Exception:
+            return jsonify({"error": "Invalid user_id format"}), 400
+
+        data = request.get_json() or {}
+
+        username = data.get("username")
+        password = data.get("password")
+
+        if username is None and password is None:
+            return jsonify({"error": "No fields provided to update"}), 400
+
+        # Determine which collection the user belongs to
+        collection_name = None
+        if mongo.db.vendors.find_one({"_id": user_obj_id}):
+            collection_name = "vendors"
+        elif mongo.db.wanters.find_one({"_id": user_obj_id}):
+            collection_name = "wanters"
+        else:
+            return jsonify({"error": "User not found"}), 404
+
+        update_doc = {}
+
+        if username is not None:
+            if not username:
+                return jsonify({"error": "username cannot be empty"}), 400
+            # Ensure username uniqueness in that collection
+            existing = mongo.db[collection_name].find_one({"username": username, "_id": {"$ne": user_obj_id}})
+            if existing:
+                return jsonify({"error": "Username already exists"}), 400
+            update_doc["username"] = username
+
+        if password is not None:
+            if not password:
+                return jsonify({"error": "password cannot be empty"}), 400
+            update_doc["password"] = sha256(password.encode()).hexdigest()
+
+        result = mongo.db[collection_name].update_one({"_id": user_obj_id}, {"$set": update_doc})
+
+        if result.matched_count == 0:
+            return jsonify({"error": "User not found"}), 404
+
+        return jsonify({"message": "User updated successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/user/<user_id>', methods=['DELETE'])
 def delete_user(user_id):
@@ -226,7 +373,25 @@ def delete_user(user_id):
     Delete a user from the database.
     Returns a success message if the user was deleted successfully.
     '''
-    return jsonify({"message": "Delete user endpoint not implemented yet"}), 501
+    try:
+        try:
+            user_obj_id = ObjectId(user_id)
+        except Exception:
+            return jsonify({"error": "Invalid user_id format"}), 400
+
+        # Try deleting from vendors first, then wanters
+        result_vendor = mongo.db.vendors.delete_one({"_id": user_obj_id})
+        if result_vendor.deleted_count > 0:
+            return jsonify({"message": "User deleted successfully"}), 200
+
+        result_wanter = mongo.db.wanters.delete_one({"_id": user_obj_id})
+        if result_wanter.deleted_count > 0:
+            return jsonify({"message": "User deleted successfully"}), 200
+
+        return jsonify({"error": "User not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/test_cases')
 def test_cases():
