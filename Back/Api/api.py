@@ -42,20 +42,28 @@ We currently have the following endpoints implemented:
     This automatically generates a unique ID for each user.
 - Create Item Endpoint: Allows vendors to create new items. The item information is stored in the "items" collection in MongoDB,
     and each item is associated with the vendor that created it via the vendor's ID.
-Implement Get Items Endpoint
+- Get Items Endpoint
     - This will allow users to retrieve a list of items from the database, potentially with filtering options (e.g., by vendor, by item name, etc.).
-Implement Update Item Endpoint
+- Update Item Endpoint
     - This will allow vendors to update the details of their items (e.g., change the name, update fields, etc.).
-Implement Delete Item Endpoint
+- Delete Item Endpoint
     - This will allow vendors to delete their items from the database.
-Implement Get User Info, Update User Info, and Delete User Endpoints
+- Get User Info, Update User Info, and Delete User Endpoints
     - These will allow users to retrieve, update, and delete their own information from the database.
+- Login Endpoint
+    - This will allow users to log in and receive a token for authentication (maybe _id for now, maybe eventually we will implement a more secure token-based system).
+    - Need to not store passwords in plaintext, eventually we should implement password hashing for security.
+
 
 TODO: 
-Implement Login Endpoint
-- This will allow users to log in and receive a token for authentication (maybe _id for now, maybe eventually we will implement a more secure token-based system).
-- Need to not store passwords in plaintext, eventually we should implement password hashing for security.
+Immediate Next Steps:
+ - Clarify handling of tokens for authentication and authorization (e.g., how to associate tokens with users, how to verify tokens for protected endpoints, etc.)
+ - Test what is currently implemented and make sure it works as expected.
+ - Code review then merge what is currently implemented into the main branch.
 
+Future Improvements:
+ - Implement authentication and authorization for the endpoints (e.g., only allow vendors to create/update/delete items, only allow users to update/delete their own information, etc.).
+ - Implement more robust error handling and input validation for the endpoints.
 '''
 @app.route('/api/register', methods=['POST'])
 def register():
