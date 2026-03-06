@@ -28,6 +28,7 @@ import RecipientView from './views/RecipientView';
 import DistributorView from './views/DistributorView';
 import Login from './views/Login';
 import Signup from './views/Signup';
+import SettingsPage from './views/SettingsPage';
 
 import Card from './components/Card';
 import Badge from './components/Badge';
@@ -68,6 +69,7 @@ export default function App() {
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
+  const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account'
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
@@ -103,18 +105,31 @@ export default function App() {
               Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
             </button>
             
-            <button
-              onClick={() => setIsAuthenticated(prev => !prev)} 
-              className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-slate-600"
-            >
-              <User size={18} />
-            </button>
+            <div className="hidden sm:flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
+    <User size={14} />
+    <select
+      className="bg-transparent border-none focus:ring-0 cursor-pointer"
+      value={''} // default value, you can manage state if you want
+      onChange={(e) => {
+        const value = e.target.value;
+        if (value === 'logout') setIsAuthenticated(false);
+        else setActivePage(value); // 'account' or 'settings'
+      }}
+    >
+      <option value="" disabled>
+        Profile
+      </option>
+      <option value="account">Account</option>
+      <option value="settings">Settings</option>
+      <option value="logout">Logout</option>
+    </select>
+  </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-      {isAuthenticated && (
+      {isAuthenticated && activePage !== 'settings' && (
           <div className="mb-8 flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search 
@@ -145,6 +160,8 @@ export default function App() {
       onSwitchToSignup={() => setShowSignup(true)}
     />
   )
+) : activePage === 'settings' ? (
+  <SettingsPage />
 ) : (
   role === 'recipient' ? (
     <RecipientView 

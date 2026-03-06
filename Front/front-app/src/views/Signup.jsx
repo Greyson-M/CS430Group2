@@ -7,6 +7,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -42,7 +43,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-medium font-medium text-slate-700 mb-1">
               Full Name
             </label>
             <input
@@ -55,7 +56,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-medium font-medium text-slate-700 mb-1">
               Email
             </label>
             <input
@@ -68,7 +69,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-medium font-medium text-slate-700 mb-1">
               Password
             </label>
             <div className="relative">
@@ -90,7 +91,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-600 mb-1">
+            <label className="block text-medium font-medium text-slate-700 mb-1">
               Confirm Password
             </label>
             <input
@@ -100,6 +101,34 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition"
               placeholder="Confirm your password"
             />
+          </div>
+
+          <div className ="mb-4">
+            <label className = "block text-medium font-medium text-slate-700 mb-1">Role</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1 text-medium">
+                <input
+                  type="radio"
+                  name="role"
+                  value="distributor"
+                  checked={role === "distributor"}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="form-radio"
+                />
+                Resource Distributer
+              </label>
+              <label className="flex items-center gap-1 text-medium">
+                <input
+                  type="radio"
+                  name="role"
+                  value="recipient"
+                  checked={role === "recipient"}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="form-radio"
+                />
+                Resource Recipient
+              </label>
+            </div>
           </div>
 
           <button
