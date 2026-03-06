@@ -11,78 +11,181 @@ class Tester:
         self.client = client
         self.data = {}
         self.report_card = {}
+        self.current_token = None
+        self.current_user_id = None
+        self.current_item_id = None
 
-    def test_item_insertion_invalid(self):
-        # TEST CASE 1: Insert a test item into the database, This vendor id does not currently exist, so this test passing means that the endpoint is correctly validating the vendor_id and rejecting invalid ones.
-        test_item = {"vendor_id": "60a7e0b5f1b2c3d4e5f6a7b8", "item_name": "Test yeah", "fields": {"field1": "value1", "field2": "value2"}}
-        
-        # Simulate a POST request to /api/items with the JSON payload
-        result = self.client.post('/api/items', json=test_item)
+    # --- HELPER FUNCTIONS ---
+    def _get_headers(self, requires_auth):
+        headers = {}
+        if requires_auth and self.current_token:
+            headers['Authorization'] = f"Bearer {self.current_token}"
+        return headers
 
-        if result.status_code == 201:
-            self.report_card["test_item_insertion_invalid"] = "Failed"
-            print("FAIL - Test item inserted successfully with ID:", result.get_json().get("id"))
-            return "Failed"
-        else:
-            self.report_card["test_item_insertion_invalid"] = "Passed"
-            print("PASS - Failed to insert test item. Error:", result.get_json())
-            return "Passed"
+    def _get(self, endpoint, requires_auth=False):
+        return self.client.get(endpoint, headers=self._get_headers(requires_auth))
 
-    def test_user_registration(self):
-        # Create a test user, add to the database, and check if it was added successfully by calling 
-            
-        # TEST CASE 2: Register a test user and test login with that user
+    def _post(self, endpoint, payload=None, requires_auth=False):
+        return self.client.post(endpoint, json=payload, headers=self._get_headers(requires_auth))
+
+    def _put(self, endpoint, payload=None, requires_auth=False):
+        return self.client.put(endpoint, json=payload, headers=self._get_headers(requires_auth))
+
+    def _delete(self, endpoint, requires_auth=False):
+        return self.client.delete(endpoint, headers=self._get_headers(requires_auth))
+
+    def test_user_registration_and_login(self):
         test_user = {
             "user_type": "vendors",
-            "username": "vendor123",
+            "username": "vendor_test_123",
             "password": "securepassword"
         }
         
-        # Simulate a POST request to /api/register
-        register_result = self.client.post('/api/register', json=test_user)
+        # Registration
+        register_result = self._post('/api/register', test_user)
         self.data['register_result'] = register_result
         
         if register_result.status_code == 201:
-            print("PASS - Test user registered successfully with ID:", register_result.get_json().get("id"))
-            test_user_registration = "Passed"
+            self.current_user_id = register_result.get_json().get('id')
             self.report_card["test_user_registration"] = "Passed"
         else:
-            test_user_registration = "Failed"
             self.report_card["test_user_registration"] = "Failed"
-            print("FAIL - Failed to register test user.")
 
-        # Simulate a POST request to /api/login
-        login_result = self.client.post('/api/login', json={
-            "username": "vendor123",
+        # Login
+        login_result = self._post('/api/login', {
+            "username": "vendor_test_123",
             "password": "securepassword"
         })
         
         if login_result.status_code == 200:
-            print("PASS - Test user logged in successfully with token:", login_result.get_json().get("token"))
-            test_user_login = "Passed"
+            self.current_token = login_result.get_json().get("token")
             self.report_card["test_user_login"] = "Passed"
         else:
-            test_user_login = "Failed"
-            print("FAIL - Failed to log in test user.")
             self.report_card["test_user_login"] = "Failed"
 
-        return test_user_registration, test_user_login
-    
+    def test_item_insertion_invalid(self):
+        test_item = {
+            "vendor_id": "60a7e0b5f1b2c3d4e5f6a7b8", 
+            "item_name": "Invalid Item", 
+            "fields": {"color": "red"}
+        }
+        result = self._post('/api/items', test_item, requires_auth=True)
+
+        if result.status_code == 201:
+            self.report_card["test_item_insertion_invalid"] = "Failed"
+        else:
+            self.report_card["test_item_insertion_invalid"] = "Passed"
+
     def test_item_insertion(self):
-        #use the vendor_id from the registered test user to test item insertion with a valid vendor_id
-        vendor_id = self.data['register_result'].get_json().get("id")
-        test_item_valid_vendor = {"vendor_id": vendor_id, "item_name": "Test yeah", "fields": {"field1": "value1", "field2": "value2"}}
-        result_valid_vendor = self.client.post('/api/items', json=test_item_valid_vendor)
-        if result_valid_vendor.status_code == 201:
-            print("PASS - Test item inserted successfully with valid vendor ID, ID:", result_valid_vendor.get_json().get("id"))
+        if not self.current_user_id:
+            self.report_card["test_item_insertion_valid_vendor"] = "Skipped"
+            return
+
+        test_item_valid = {
+            "vendor_id": self.current_user_id, 
+            "item_name": "Valid Test Item", 
+            "fields": {"color": "blue"}
+        }
+        
+        result = self._post('/api/items', test_item_valid, requires_auth=True)
+        
+        if result.status_code == 201:
+            self.current_item_id = result.get_json().get('id')
             self.report_card["test_item_insertion_valid_vendor"] = "Passed"
         else:
             self.report_card["test_item_insertion_valid_vendor"] = "Failed"
-            print("FAIL - Failed to insert test item with valid vendor ID. Error:", result_valid_vendor.get_json())
+
+    def test_get_items(self):
+        # Public endpoint
+        result = self._get('/api/items')
+        if result.status_code == 200 and isinstance(result.get_json(), list):
+            self.report_card["test_get_items"] = "Passed"
+        else:
+            self.report_card["test_get_items"] = "Failed"
+
+    def test_update_item(self):
+        if not self.current_item_id:
+            self.report_card["test_update_item"] = "Skipped"
+            return
+
+        update_payload = {"item_name": "Updated Valid Test Item"}
+        result = self._put(f'/api/items/{self.current_item_id}', update_payload, requires_auth=True)
+        
+        if result.status_code == 200:
+            self.report_card["test_update_item"] = "Passed"
+        else:
+            self.report_card["test_update_item"] = "Failed"
+
+    def test_delete_item(self):
+        if not self.current_item_id:
+            self.report_card["test_delete_item"] = "Skipped"
+            return
+
+        result = self._delete(f'/api/items/{self.current_item_id}', requires_auth=True)
+        if result.status_code == 200:
+            self.report_card["test_delete_item"] = "Passed"
+        else:
+            self.report_card["test_delete_item"] = "Failed"
+
+    def test_update_user(self):
+        if not self.current_user_id:
+            self.report_card["test_update_user"] = "Skipped"
+            return
+
+        update_payload = {"username": "vendor_test_123_updated"}
+        result = self._put(f'/api/user/{self.current_user_id}', update_payload, requires_auth=True)
+        if result.status_code == 200:
+            self.report_card["test_update_user"] = "Passed"
+        else:
+            self.report_card["test_update_user"] = "Failed"
+
+    def test_get_user(self):
+        if not self.current_user_id:
+            self.report_card["test_get_user"] = "Skipped"
+            return
+
+        result = self._get(f'/api/user/{self.current_user_id}', requires_auth=True)
+        if result.status_code == 200:
+            self.report_card["test_get_user"] = "Passed"
+        else:
+            self.report_card["test_get_user"] = "Failed"
+
+    def test_delete_user(self):
+        if not self.current_user_id:
+            self.report_card["test_delete_user"] = "Skipped"
+            return
+
+        result = self._delete(f'/api/user/{self.current_user_id}', requires_auth=True)
+        if result.status_code == 200:
+            self.report_card["test_delete_user"] = "Passed"
+        else:
+            self.report_card["test_delete_user"] = "Failed"
 
     def run_all_tests(self):
+        # 1. Test utilities (Unauthenticated)
+        self.test_utilities()
+
+        # 2. Test User Creation & Login
+        self.test_user_registration_and_login()
+
+        # 3. Test Item Creation
         self.test_item_insertion_invalid()
-        self.test_user_registration()
         self.test_item_insertion()
+
+        # 4. Test Item Fetching
+        self.test_get_items()
+
+        # 5. Test Item Updating
+        self.test_update_item()
+
+        # 6. Test Item Deletion
+        self.test_delete_item()
+
+        # 7. Test User Updating and Fetching
+        self.test_update_user()
+        self.test_get_user()
+
+        # 8. Test User Deletion (Cleanup)
+        self.test_delete_user()
+
         return jsonify(self.report_card)
-    

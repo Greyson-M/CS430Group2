@@ -5,19 +5,51 @@ from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 from bson.objectid import ObjectId
 from hashlib import sha256
+import jwt
+from functools import wraps
+import datetime
 
 from test_cases import Tester
 
-# 1. Load environment variables from the .env file
+# Load environment variables from the .env file
 load_dotenv()
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'big_secret_herebig_secret_herebig_secret_herebig_secret_here'  # In production, use a more secure secret key and store it safely (e.g., in environment variables)
 
-# 2. Grab the MONGO_URI from the environment and add it to Flask's config
+# Get the MONGO_URI from the environment and add it to Flask's config
 app.config["MONGO_URI"] = os.getenv("MONGO_URI")
 
-# 3. Initialize the PyMongo extension with your app
+# Initialize the PyMongo extension with your app
 mongo = PyMongo(app)
+
+# Define token_required decorator for protected endpoints
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        # Check if the token is provided in the Authorization header
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]  # Expecting "Bearer <token>"
+        
+        if not token:
+            return jsonify({"error": "Token is missing!"}), 401
+        
+        try:
+            # Decode the token using the secret key
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user_id = data['user_id']
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Token is invalid!'}), 401
+
+        # Pass the decoded user ID to the route
+        return f(current_user_id, *args, **kwargs)
+
+    return decorated
+
 
 @app.route('/api/time')
 def get_current_time():
@@ -53,17 +85,19 @@ We currently have the following endpoints implemented:
 - Login Endpoint
     - This will allow users to log in and receive a token for authentication (maybe _id for now, maybe eventually we will implement a more secure token-based system).
     - Need to not store passwords in plaintext, eventually we should implement password hashing for security.
-
+Additional Done:
+ - Clarify handling of tokens for authentication and authorization (e.g., how to associate tokens with users, how to verify tokens for protected endpoints, etc.)
+ - Test what is currently implemented and make sure it works as expected.
+ - Protect update item and delete item endpoints (must be logged in and owner of the item to update/delete).
+ - Change get_user_info, update_user_info, and delete_user_info to post user_id in the body instead of the URL. must also be logged in and owner of the account to update/delete.
+ - Implement authentication and authorization for the endpoints (e.g., only allow vendors to create/update/delete items, only allow users to update/delete their own information, etc.).
 
 TODO: 
 Immediate Next Steps:
- - Clarify handling of tokens for authentication and authorization (e.g., how to associate tokens with users, how to verify tokens for protected endpoints, etc.)
- - Test what is currently implemented and make sure it works as expected.
  - Code review then merge what is currently implemented into the main branch.
 
 Future Improvements:
- - Implement authentication and authorization for the endpoints (e.g., only allow vendors to create/update/delete items, only allow users to update/delete their own information, etc.).
- - Implement more robust error handling and input validation for the endpoints.
+ - Implement more robust error handling and input validation for the endpoints, if necessary.
 '''
 @app.route('/api/register', methods=['POST'])
 def register():
@@ -104,24 +138,20 @@ def register():
     }), 201
 
 @app.route('/api/items', methods=['POST'])
-def create_item():
+@token_required
+def create_item(current_user_id):
     '''
     Create a new item in the database.
+    Requires Authorization header.
     Expects a JSON payload with 'vendor_id', 'item_name', and optional 'fields'.
-    Example payload:
-    {   
-        "vendor_id": "12345",
-        "item_name": "My Item",
-        "fields": {
-            "field1": "value1",
-            "field2": "value2"
-        }
-    }
-    Returns the ID of the created item and a success message.
     '''
 
     data = request.get_json()
     vendor_id = data.get('vendor_id')
+
+    # AUTHORIZATION CHECK: Ensure the user is creating an item for their own account
+    if vendor_id != current_user_id:
+        return jsonify({"error": "Unauthorized: You can only create items for your own account"}), 403
 
     # Validate that the vendor_id exists in the 'vendors' collection
     if not vendor_id or not mongo.db.vendors.find_one({"_id": ObjectId(vendor_id)}):
@@ -142,8 +172,6 @@ def create_item():
         "id": str(result.inserted_id)
     }), 201
 
-#----------- Stubs for future endpoints -----------#
-#Inventory crud stubs
 @app.route('/api/items', methods=['GET'])
 def get_items():
     '''
@@ -180,28 +208,27 @@ def get_items():
         return jsonify(items), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 @app.route('/api/items/<item_id>', methods=['PUT'])
-def update_item(item_id):
+@token_required
+def update_item(current_user_id, item_id):
     '''
     Update the details of an item.
-    Expects a JSON payload with the fields to update (e.g., 'item_name', 'fields', etc.).
-    Example payload:
-    {
-        "item_name": "Updated Item Name",
-        "fields": {
-            "field1": "new value1",
-            "field2": "new value2"
-        }
-    }
-    Returns a success message if the item was updated successfully.
+    Requires Authorization header.
     '''
-
     try:
         try:
             item_obj_id = ObjectId(item_id)
         except Exception:
             return jsonify({"error": "Invalid item_id format"}), 400
+        
+        # 1. Fetch the item to check ownership
+        item = mongo.db.items.find_one({"_id": item_obj_id})
+        if not item:
+            return jsonify({"error": "Item not found"}), 404
+
+        # 2. AUTHORIZATION CHECK
+        if str(item.get('vendor_id')) != current_user_id:
+            return jsonify({"error": "Unauthorized: You do not own this item"}), 403
         
         data = request.get_json() or {}
 
@@ -220,9 +247,6 @@ def update_item(item_id):
             return jsonify({"error": "No valid fields to update"}), 400
         
         result = mongo.db.items.update_one({"_id": item_obj_id}, {"$set": update_doc})
-
-        if result.matched_count == 0:
-            return jsonify({"error": "Item not found"}), 404
         
         return jsonify({"message": "Item updated successfully"}), 200
     
@@ -230,10 +254,11 @@ def update_item(item_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/items/<item_id>', methods=['DELETE'])
-def delete_item(item_id):
+@token_required
+def delete_item(current_user_id, item_id):
     '''
     Delete an item from the database.
-    Returns a success message if the item was deleted successfully.
+    Requires Authorization header.
     '''
     try:
         try:
@@ -241,16 +266,22 @@ def delete_item(item_id):
         except Exception:
             return jsonify({"error": "Invalid item_id format"}), 400
         
-        result = mongo.db.items.delete_one({"_id": item_obj_id})
-
-        if result.deleted_count == 0:
+        # 1. Fetch the item to check ownership
+        item = mongo.db.items.find_one({"_id": item_obj_id})
+        if not item:
             return jsonify({"error": "Item not found"}), 404
+
+        # 2. AUTHORIZATION CHECK
+        if str(item.get('vendor_id')) != current_user_id:
+            return jsonify({"error": "Unauthorized: You do not own this item"}), 403
+        
+        result = mongo.db.items.delete_one({"_id": item_obj_id})
         
         return jsonify({"message": "Item deleted successfully"}), 200
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+    
 # Accounts:
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -276,19 +307,30 @@ def login():
     }) or mongo.db.wanters.find_one({"username": username, "password": hashed_password})
     if not user:
         return jsonify({"error": "Invalid username or password"}), 401
-    else:
-        # Return success message and user ID as token for now
-        return jsonify({
-            "message": "Login successful",
-            "token": str(user["_id"])
-        }), 200
-    
+
+    # Generate a JWT token
+    token = jwt.encode({
+        'user_id': str(user['_id']),
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+
+    # Return success message and user ID as token for now
+    return jsonify({
+        "message": "Login successful",
+        "token": token
+    }), 200
+
 @app.route('/api/user/<user_id>', methods=['GET'])
-def get_user_info(user_id):
+@token_required
+def get_user_info(current_user_id, user_id):
     '''
     Get the information of a user.
-    Returns the user's information if the user exists.
+    Requires Authorization header.
     '''
+    # AUTHORIZATION CHECK
+    if current_user_id != user_id:
+        return jsonify({"error": "Unauthorized: You can only view your own account"}), 403
+    
     try:
         try:
             user_obj_id = ObjectId(user_id)
@@ -319,12 +361,15 @@ def get_user_info(user_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/user/<user_id>', methods=['PUT'])
-def update_user_info(user_id):
+@token_required
+def update_user_info(current_user_id, user_id):
     '''
     Update the information of a user.
-    Expects a JSON payload with the fields to update (e.g., 'username', 'password', etc.).
-    Returns a success message if the user's information was updated successfully.
+    Requires Authorization header.
     '''
+    # AUTHORIZATION CHECK
+    if current_user_id != user_id:
+        return jsonify({"error": "Unauthorized: You can only update your own account"}), 403
     
     try:
         try:
@@ -376,11 +421,16 @@ def update_user_info(user_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/user/<user_id>', methods=['DELETE'])
-def delete_user(user_id):
+@token_required
+def delete_user(current_user_id, user_id):
     '''
     Delete a user from the database.
-    Returns a success message if the user was deleted successfully.
+    Requires Authorization header.
     '''
+    # AUTHORIZATION CHECK
+    if current_user_id != user_id:
+        return jsonify({"error": "Unauthorized: You can only delete your own account"}), 403
+    
     try:
         try:
             user_obj_id = ObjectId(user_id)
