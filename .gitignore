@@ -4,10 +4,9 @@
 
 /.vs
 node_modules
+*.env
+Back/Api/.env
 
-# Python cache files
+# Python
 __pycache__/
 *.pyc
-
-# Environment variables
-.env
