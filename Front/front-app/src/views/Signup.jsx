@@ -9,7 +9,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!name || !email || !password || !confirmPassword) {
@@ -22,8 +22,31 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
       return;
     }
 
-    // Temporary fake signup success
-    onSignup();
+    try {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_type: role === "distributor" ? "vendors" : "wanters",
+          username: email,
+          password: password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to register");
+      }
+
+      const data = await response.json();
+      // alert("Signup successful! Your user ID is: " + data.id);
+      onSignup({ name, email, password, role });
+    } catch (error) {
+      console.error("Error during signup:", error);
+      throw error;
+    }
   };
 
   return (

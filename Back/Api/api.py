@@ -8,6 +8,9 @@ from hashlib import sha256
 import jwt
 from functools import wraps
 import datetime
+from flask_cors import CORS
+import secrets
+
 
 from test_cases import Tester
 
@@ -15,6 +18,7 @@ from test_cases import Tester
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 app.config['SECRET_KEY'] = 'big_secret_herebig_secret_herebig_secret_herebig_secret_here'  # In production, use a more secure secret key and store it safely (e.g., in environment variables)
 
 # Get the MONGO_URI from the environment and add it to Flask's config
@@ -50,6 +54,20 @@ def token_required(f):
 
     return decorated
 
+#enpoint that takes a authtoken as input and returns whether the token is currently valid (i.e., not expired and properly signed).
+@app.route('/api/validate-token', methods=['POST'])
+@token_required
+def validate_token(current_user_id):
+    return jsonify({"message": "Token is valid", "user_id": current_user_id}), 200
+
+@app.route('/api/invalidate-all-tokens', methods=['GET', 'POST'])   #Technically, should just be a POST or PUT since it is changing server state, but since this is just a testing endpoint and not something that will be exposed to users, it is much easier to test if it is a GET endpoint that can be easily accessed from the browser.
+def invalidate_all_tokens():
+    '''
+    Testing endpoint: Invalidates all existing JWT tokens by rotating the secret key.
+    All users will need to log in again.
+    '''
+    app.config['SECRET_KEY'] = secrets.token_hex(32)
+    return jsonify({"message": "All tokens have been invalidated. Users must log in again."}), 200
 
 @app.route('/api/time')
 def get_current_time():
@@ -137,6 +155,52 @@ def register():
         "id": str(result.inserted_id)
     }), 201
 
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    '''
+    Login a user.
+    Expects a JSON payload with 'username' and 'password'.
+    Example payload:
+    {
+        "username": "vendor123",
+        "password": "securepassword"
+    }
+    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
+    '''
+
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    hashed_password = sha256(password.encode()).hexdigest()
+
+    user_type = None
+    user = mongo.db.vendors.find_one({"username": username, "password": hashed_password})
+    if user:
+        user_type = "vendors"
+    else:
+        user = mongo.db.wanters.find_one({"username": username, "password": hashed_password})
+        if user:
+            user_type = "wanters"
+
+    if not user:
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    # Include user_type in the JWT
+    token = jwt.encode({
+        'user_id': str(user['_id']),
+        'user_type': user_type,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+
+    return jsonify({
+        "message": "Login successful",
+        "token": token,
+        "user_type": user_type
+    }), 200
+
+
 @app.route('/api/items', methods=['POST'])
 @token_required
 def create_item(current_user_id):
@@ -208,6 +272,7 @@ def get_items():
         return jsonify(items), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
 @app.route('/api/items/<item_id>', methods=['PUT'])
 @token_required
 def update_item(current_user_id, item_id):
@@ -283,43 +348,6 @@ def delete_item(current_user_id, item_id):
         return jsonify({"error": str(e)}), 500
     
 # Accounts:
-@app.route('/api/login', methods=['POST'])
-def login():
-    '''
-    Login a user.
-    Expects a JSON payload with 'username' and 'password'.
-    Example payload:
-    {
-        "username": "vendor123",
-        "password": "securepassword"
-    }
-    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
-    '''
-
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    hashed_password = sha256(password.encode()).hexdigest()
-
-    #Authenticate against both collections since we don't know if the user is a wanter or a vendor
-    user = mongo.db.vendors.find_one({"username": username, "password": hashed_password
-    }) or mongo.db.wanters.find_one({"username": username, "password": hashed_password})
-    if not user:
-        return jsonify({"error": "Invalid username or password"}), 401
-
-    # Generate a JWT token
-    token = jwt.encode({
-        'user_id': str(user['_id']),
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
-    }, app.config['SECRET_KEY'], algorithm="HS256")
-
-    # Return success message and user ID as token for now
-    return jsonify({
-        "message": "Login successful",
-        "token": token
-    }), 200
-
 @app.route('/api/user/<user_id>', methods=['GET'])
 @token_required
 def get_user_info(current_user_id, user_id):
