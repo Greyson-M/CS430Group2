@@ -2,9 +2,28 @@
 
 - For setting up the frontend, please refer to [the Frontend README](Front/FrontSetup.md).
 - For setting up the backend, please refer to [the Backend README](Back/BackSetup.md).
+- For API documentation, please refer to [the API documentation](Back/Api/documentation.md).
 
 ---
 
-1. Once the frontend and backend are set up, you can run the backend first by navigating to the `Back/Api` directory and running `flask run`. Make sure that the venv is activate and that you have installed the dependencies.
-2. Then, you can run the frontend by navigating to the `Front/front-app` directory and running `npm run dev`. This will start the Vite development server.
-3. Open your browser and go to `http://localhost:5173` to see the frontend. You should see the current time displayed, which is fetched from the backend API. This demonstrates that the frontend and backend are successfully connected.
+## Back-Frontend Integration
+
+### Currently Done:
+
+- The frontend can successfully make API calls to the backend to enable <u>user creation</u> and <u>login/logout</u>. Needs more thorough testing, but the signup,sing in, and signout all seem functional.
+- The frontend displays an <u>API and login status indicator</u> in the footer, which updates every 30s.
+- The backend has an endpoint to <u>invalidate all tokens</u> for testing purposes, which can be used to verify that the frontend correctly detects expired tokens and updates the UI accordingly.
+
+### What's next:
+
+- Integrate the API calls for item management:
+    - Create Item
+    - View Items
+    - Edit Item
+    - Delete Item
+
+- Integrate the API calls for user account management:
+    - View Account Details
+    - Edit Account Details
+
+- Improve upon error handling and user feedback in the frontend, such as displaying error messages when API calls fail or when login credentials are incorrect.
