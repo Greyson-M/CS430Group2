@@ -19,6 +19,14 @@ export default function RecipientView({ tickets, resources, receipts }) {
   const [activeTab, setActiveTab] = useState('browse');
   const [selectedTicket, setSelectedTicket] = useState(null);
 
+  // -----------------------
+  // TEMPORARY TEST DATA
+  // -----------------------
+  const reliefCenters = [
+    { name: 'Mountainlair', lat: 39.6358, lng: -79.9547, address: '1550 University Ave, Morgantown, WV 26506' }
+  ];
+  const testTickets = [];
+
   return (
     <div className="space-y-6">
       <div className="flex bg-slate-200 p-1 rounded-xl w-fit">
@@ -41,7 +49,9 @@ export default function RecipientView({ tickets, resources, receipts }) {
         ))}
       </div>
 
-      {activeTab === 'map' && <MapView resources={resources} tickets={tickets} />}
+      {activeTab === 'map' && (
+        <MapView reliefCenters={reliefCenters} tickets={testTickets} /> /////////////test data
+      )}
 
       {activeTab === 'browse' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

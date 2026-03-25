@@ -24,6 +24,8 @@ import {
   MapPin
 } from 'lucide-react';
 
+import 'leaflet/dist/leaflet.css';
+
 import RecipientView from './views/RecipientView';
 import DistributorView from './views/DistributorView';
 import Login from './views/Login';
