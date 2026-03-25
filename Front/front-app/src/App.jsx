@@ -29,6 +29,8 @@ import DistributorView from './views/DistributorView';
 import Login from './views/Login';
 import Signup from './views/Signup';
 import SettingsPage from './views/SettingsPage';
+import RegisterResource from './views/RegisterResource';
+import LaunchScanner from './views/LaunchScanner';
 
 import Card from './components/Card';
 import Badge from './components/Badge';
@@ -69,7 +71,7 @@ export default function App() {
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
-  const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account'
+  const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account', 'registerResource'
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
@@ -162,6 +164,10 @@ export default function App() {
   )
 ) : activePage === 'settings' ? (
   <SettingsPage />
+) : activePage === 'registerResource' ? (
+  <RegisterResource setActivePage={setActivePage} />
+) : activePage === 'launchScanner' ? (
+  <LaunchScanner onBack={() => setActivePage('home')} />
 ) : (
   role === 'recipient' ? (
     <RecipientView 
@@ -170,7 +176,10 @@ export default function App() {
       receipts={MOCK_RECEIPTS} 
     />
   ) : (
-    <DistributorView resources={MOCK_RESOURCES} />
+    <DistributorView 
+      resources={MOCK_RESOURCES} 
+      setActivePage={setActivePage}
+    />
   )
 )}
       </main>

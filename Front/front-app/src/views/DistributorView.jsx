@@ -11,7 +11,7 @@ import {
 
 import Card from '../components/Card';
 
-export default function DistributorView({ resources }) {
+export default function DistributorView({ resources, setActivePage }) {
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -19,7 +19,7 @@ export default function DistributorView({ resources }) {
           <h2 className="text-2xl font-bold text-slate-900 text-slate-800">Supply Distribution Hub</h2>
           <p className="text-slate-500">Coordinate tickets and community supply levels.</p>
         </div>
-        <button className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium shadow-lg shadow-emerald-200/50">
+        <button onClick={() => setActivePage('registerResource')} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium shadow-lg shadow-emerald-200/50">
           <Plus size={20} /> Register Resource
         </button>
       </div>
@@ -74,7 +74,7 @@ export default function DistributorView({ resources }) {
             <h3 className="text-2xl font-bold mb-2">Verification Station</h3>
             <p className="text-slate-400 max-w-md">Process recipient arrivals. Scan digital tickets to authorize resource release and generate secure receipts.</p>
           </div>
-          <button className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-emerald-400 transition-all transform hover:scale-105">
+          <button onClick={() => setActivePage('launchScanner')} className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-emerald-400 transition-all transform hover:scale-105">
             <Maximize2 size={24} /> Launch Scanner
           </button>
         </div>
