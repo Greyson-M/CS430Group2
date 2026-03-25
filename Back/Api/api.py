@@ -11,6 +11,9 @@ import datetime
 from flask_cors import CORS
 import secrets
 
+# Load the private key for signing tickets (Ensure the file path is correct for your environment)
+with open('jwtRS256.key', 'r') as f:
+    PRIVATE_KEY = f.read()
 
 from test_cases import Tester
 
@@ -228,7 +231,7 @@ def create_item(current_user_id):
         return jsonify({"error": "Item name is required"}), 400
         
     # Insert into the 'items' collection
-    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "fields": fields}
+    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "vendor_id": vendor_id, "fields": fields}
     result = mongo.db.items.insert_one(new_item)
     
     return jsonify({
@@ -478,6 +481,108 @@ def delete_user(current_user_id, user_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+#------------------------- Ticketing Endpoints -------------------------#
+
+@app.route('/api/tickets', methods=['POST'])
+@token_required
+def generate_ticket(current_user_id):
+    '''
+    HAVER (Vendor) GENERATES TICKET INVENTORY
+    Expects JSON: { "item_id": "...", "quantity": 100 }
+    '''
+    # 1. Authorization: Ensure user is a vendor
+    vendor = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
+    if not vendor:
+        return jsonify({"error": "Unauthorized: Only vendors (Havers) can generate tickets"}), 403
+
+    data = request.get_json()
+    item_id = data.get('item_id')
+    total_qty = data.get('quantity')
+
+    if not item_id or not isinstance(total_qty, int) or total_qty <= 0:
+        return jsonify({"error": "Valid item_id and positive quantity are required"}), 400
+
+    # Verify the item exists and belongs to this vendor
+    item = mongo.db.items.find_one({"_id": ObjectId(item_id), "vendor_id": ObjectId(current_user_id)})
+    if not item:
+        return jsonify({"error": "Item not found or does not belong to you"}), 404
+
+    # 2. Create the ticket inventory record
+    new_ticket_batch = {
+        "vendor_id": ObjectId(current_user_id),
+        "item_id": ObjectId(item_id),
+        "total_qty": total_qty,
+        "available_qty": total_qty, # State management: track available vs total
+        "created_at": datetime.datetime.utcnow()
+    }
+    
+    result = mongo.db.tickets.insert_one(new_ticket_batch)
+    
+    return jsonify({
+        "message": "Ticket inventory generated successfully",
+        "ticket_batch_id": str(result.inserted_id)
+    }), 201
+
+
+@app.route('/api/tickets/<ticket_batch_id>/request', methods=['POST'])
+@token_required
+def request_ticket(current_user_id, ticket_batch_id):
+    '''
+    WANTER REQUESTS TICKET
+    Checks availability, updates state (instead of deleting), and returns a Signed JWT.
+    '''
+    # 1. Authorization: Ensure user is a wanter
+    wanter = mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
+    if not wanter:
+        return jsonify({"error": "Unauthorized: Only wanters can request tickets"}), 403
+
+    try:
+        batch_obj_id = ObjectId(ticket_batch_id)
+    except Exception:
+        return jsonify({"error": "Invalid ticket_batch_id format"}), 400
+
+    # 2. Atomic update: Find batch with available quantity and decrement it by 1
+    # This prevents race conditions if multiple wanters request at the exact same time
+    ticket_batch = mongo.db.tickets.find_one_and_update(
+        {"_id": batch_obj_id, "available_qty": {"$gt": 0}},
+        {"$inc": {"available_qty": -1}},
+        return_document=True
+    )
+
+    if not ticket_batch:
+        return jsonify({"error": "Tickets sold out or invalid ticket batch"}), 400
+
+    # 3. State Management: Create a specific Claimed Ticket record for this user
+    claimed_ticket = {
+        "ticket_batch_id": batch_obj_id,
+        "wanter_id": ObjectId(current_user_id),
+        "item_id": ticket_batch['item_id'],
+        "vendor_id": ticket_batch['vendor_id'],
+        "status": "Pending Redemption", # Changed from immediate deletion to state tracking
+        "claimed_at": datetime.datetime.utcnow()
+    }
+    claim_result = mongo.db.claimed_tickets.insert_one(claimed_ticket)
+    claimed_ticket_id = str(claim_result.inserted_id)
+
+    # 4. Generate the Asymmetric Digitally Signed Ticket (The QR Code payload)
+    # We use RS256 so the offline Haver can verify it using only the Public Key
+    expiration_time = datetime.datetime.utcnow() + datetime.timedelta(days=30) # 30 day expiration
+    
+    ticket_payload = {
+        "ticket_id": claimed_ticket_id,       # Unique ID for local device blacklisting
+        "item_id": str(ticket_batch['item_id']),
+        "wanter_id": current_user_id,
+        "exp": expiration_time                # Prevents forever-valid tickets
+    }
+
+    signed_ticket = jwt.encode(ticket_payload, PRIVATE_KEY, algorithm="RS256")
+
+    return jsonify({
+        "message": "Ticket claimed successfully",
+        "qr_payload": signed_ticket,
+        "ticket_id": claimed_ticket_id
+    }), 200
 
 @app.route('/api/test_cases')
 def test_cases():
