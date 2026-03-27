@@ -77,6 +77,21 @@ export default function RegisterResource({ setActivePage }) {
           />
         </div>
 
+        {/* Location */}
+        <div>
+          <label className="block text-sm font-medium text-slate-600 mb-1">
+            Location
+          </label>
+          <input
+            type="text"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            required
+            className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none"
+          />
+        </div>
+
         {/* Quantity */}
         <div>
           <label className="block text-sm font-medium text-slate-600 mb-1">

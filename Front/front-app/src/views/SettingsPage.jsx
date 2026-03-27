@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 
-export default function SettingsPage() {
+export default function SettingsPage({ setActivePage, language, setLanguage }) {
   const [activeTab, setActiveTab] = useState("account");
 
   // Account state
@@ -29,6 +30,16 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
+     {/* Back Button */}
+      <button
+        onClick={() => setActivePage("home")}
+        className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600 mb-4 cursor-pointer"
+      >
+        <ArrowLeft size={16} />
+        Back
+      </button>
+
+      {/* Title */}
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
       {/* Tabs */}
@@ -78,31 +89,47 @@ export default function SettingsPage() {
               />
             </div>
 
+            {/* Language */}
+            <div className="mb-4">
+              <label className="block mb-1 font-medium text-gray-700">
+                Language
+              </label>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="w-full border px-3 py-2 rounded"
+              >
+                <option>English</option>
+                <option>Spanish</option>
+                <option>French</option>
+              </select>
+            </div>
+
             {/* Resource Type */}
             <div className="mb-4">
               <label className="block mb-1 font-medium text-gray-700">
                 I am a:
               </label>
               <div className="flex gap-4 text-sm">
-                <label className="flex items-center gap-1">
+                <label className="flex items-center gap-1 cursor-pointer">
                   <input
                     type="radio"
                     name="resourceType"
                     value="holder"
                     checked={resourceType === "holder"}
                     onChange={(e) => setResourceType(e.target.value)}
-                    className="form-radio"
+                    className="form-radio cursor-pointer"
                   />
                   Resource Distributor
                 </label>
-                <label className="flex items-center gap-1">
+                <label className="flex items-center gap-1 cursor-pointer">
                   <input
                     type="radio"
                     name="resourceType"
                     value="wanter"
                     checked={resourceType === "wanter"}
                     onChange={(e) => setResourceType(e.target.value)}
-                    className="form-radio"
+                    className="form-radio cursor-pointer"
                   />
                   Resource Recipient
                 </label>
@@ -156,7 +183,7 @@ export default function SettingsPage() {
         {/* Save Button */}
         <button
           onClick={handleSave}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+          className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition cursor-pointer"
         >
           Save Settings
         </button>

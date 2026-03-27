@@ -72,6 +72,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
   const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account', 'registerResource'
+  const [showMenu, setShowMenu] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
@@ -85,48 +86,68 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
-              <Globe size={14} />
-              <select 
-                className="bg-transparent border-none focus:ring-0 cursor-pointer"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option>English</option>
-                <option>Spanish</option>
-                <option>French</option>
-              </select>
-            </div>
+  {isAuthenticated && (
+    <>
+      <div className="h-8 w-px bg-slate-200 mx-1"></div>
+
+      {/* Mode Toggle */}
+      <button 
+        onClick={() => setRole(role === 'recipient' ? 'distributor' : 'recipient')}
+        className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-800 transition-colors"
+      >
+        Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
+      </button>
+
+      {/* User Dropdown */}
+      <div className="relative">
+        {/* Profile Button */}
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-sm text-slate-600 hover:bg-slate-200 transition cursor-pointer"
+        >
+          <User size={16} />
+        </button>
+
+        {/* Dropdown Menu */}
+        {showMenu && (
+          <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
             
-            <div className="h-8 w-px bg-slate-200 mx-1"></div>
-            
-            <button 
-              onClick={() => setRole(role === 'recipient' ? 'distributor' : 'recipient')}
-              className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-800 transition-colors"
+            <button
+              onClick={() => {
+                setActivePage("home");
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
             >
-              Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
+              Home
             </button>
-            
-            <div className="hidden sm:flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
-    <User size={14} />
-    <select
-      className="bg-transparent border-none focus:ring-0 cursor-pointer"
-      value={''} // default value, you can manage state if you want
-      onChange={(e) => {
-        const value = e.target.value;
-        if (value === 'logout') setIsAuthenticated(false);
-        else setActivePage(value); // 'account' or 'settings'
-      }}
-    >
-      <option value="" disabled>
-        Profile
-      </option>
-      <option value="account">Account</option>
-      <option value="settings">Settings</option>
-      <option value="logout">Logout</option>
-    </select>
-  </div>
+
+            <button
+              onClick={() => {
+                setActivePage("settings");
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+            >
+              Settings
+            </button>
+
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                setActivePage("home");
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-600"
+            >
+              Logout
+            </button>
           </div>
+        )}
+      </div>
+    </>
+  )}
+</div>
         </div>
       </header>
 
@@ -163,7 +184,11 @@ export default function App() {
     />
   )
 ) : activePage === 'settings' ? (
-  <SettingsPage />
+  <SettingsPage 
+  setActivePage={setActivePage}
+  language={language}
+  setLanguage={setLanguage}
+/>
 ) : activePage === 'registerResource' ? (
   <RegisterResource setActivePage={setActivePage} />
 ) : activePage === 'launchScanner' ? (
