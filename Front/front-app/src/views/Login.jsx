@@ -11,6 +11,12 @@ export default function Login({ onLogin, onSwitchToSignup }) {
 
     // Temporary fake authentication
     if (email && password) {
+      if (email === "123@123" && password === "pass") {
+        alert("Login successful!");
+        onLogin("vendor");
+        return;
+      }
+
       try {
       const response = await fetch("http://localhost:5000/api/login", {
         method: "POST",
