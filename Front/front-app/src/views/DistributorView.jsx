@@ -2,8 +2,8 @@ import React from 'react';
 import {
   Plus,
   Ticket as TicketIcon,
-  History,
-  ShieldCheck,
+  Pencil,     
+  Trash2,
   Eye,
   EyeOff,
   Maximize2
@@ -53,16 +53,31 @@ export default function DistributorView({ resources, setActivePage }) {
               </div>
 
               <div className="flex gap-2">
-                <button className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Manage Tickets">
+                {/* Manage Tickets */}
+                <button 
+                  onClick={() => setActivePage({ page: 'queue', resource: res })}
+                  className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" 
+                  title="View Queue"
+                >
                   <TicketIcon size={20} />
                 </button>
-                <button className="p-2 text-slate-400 hover:text-emerald-600 transition-colors" title="Audit Log">
-                  <History size={20} />
+
+                {/* Edit */}
+                <button 
+                  className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Edit Resource"
+                >
+                  <Pencil size={20} />
                 </button>
-                <button className="p-2 text-slate-400 hover:text-rose-600 transition-colors" title="Security Settings">
-                  <ShieldCheck size={20} />
+
+                {/* Delete */}
+                <button 
+                  className="p-2 text-slate-400 hover:text-rose-600 transition-colors" 
+                  title="Delete Resource"
+                >
+                  <Trash2 size={20} />
                 </button>
               </div>
+
             </div>
           </Card>
         ))}
@@ -74,7 +89,7 @@ export default function DistributorView({ resources, setActivePage }) {
             <h3 className="text-2xl font-bold mb-2">Verification Station</h3>
             <p className="text-slate-400 max-w-md">Process recipient arrivals. Scan digital tickets to authorize resource release and generate secure receipts.</p>
           </div>
-          <button onClick={() => setActivePage('launchScanner')} className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-emerald-400 transition-all transform hover:scale-105">
+          <button onClick={() => setActivePage({ page: 'launchScanner' })} className="bg-emerald-500 text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-emerald-400 transition-all transform hover:scale-105">
             <Maximize2 size={24} /> Launch Scanner
           </button>
         </div>

@@ -31,6 +31,7 @@ import Signup from './views/Signup';
 import SettingsPage from './views/SettingsPage';
 import RegisterResource from './views/RegisterResource';
 import LaunchScanner from './views/LaunchScanner';
+import QueueView from './views/QueueView';
 
 import Card from './components/Card';
 import Badge from './components/Badge';
@@ -71,7 +72,7 @@ export default function App() {
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
-  const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account', 'registerResource'
+  const [activePage, setActivePage] = useState({ page: 'home' }); // 'home', 'settings', 'account', 'registerResource'//////////////////
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -114,7 +115,7 @@ export default function App() {
             
             <button
               onClick={() => {
-                setActivePage("home");
+                setActivePage({ page: "home" });
                 setShowMenu(false);
               }}
               className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
@@ -124,7 +125,7 @@ export default function App() {
 
             <button
               onClick={() => {
-                setActivePage("settings");
+                setActivePage({ page: "settings" });
                 setShowMenu(false);
               }}
               className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
@@ -135,7 +136,7 @@ export default function App() {
             <button
               onClick={() => {
                 setIsAuthenticated(false);
-                setActivePage("home");
+                setActivePage({ page: "home" });
                 setShowMenu(false);
               }}
               className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-600"
@@ -152,7 +153,7 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-      {isAuthenticated && activePage !== 'settings' && (
+      {isAuthenticated && activePage.page !== 'settings' && (
           <div className="mb-8 flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search 
@@ -183,16 +184,21 @@ export default function App() {
       onSwitchToSignup={() => setShowSignup(true)}
     />
   )
-) : activePage === 'settings' ? (
+) : activePage.page === 'settings' ? (
   <SettingsPage 
-  setActivePage={setActivePage}
-  language={language}
-  setLanguage={setLanguage}
-/>
-) : activePage === 'registerResource' ? (
+    setActivePage={setActivePage}
+    language={language}
+    setLanguage={setLanguage}
+  />
+) : activePage.page === 'registerResource' ? (
   <RegisterResource setActivePage={setActivePage} />
-) : activePage === 'launchScanner' ? (
-  <LaunchScanner onBack={() => setActivePage('home')} />
+) : activePage.page === 'launchScanner' ? (
+  <LaunchScanner onBack={() => setActivePage({ page: 'home' })} />
+) : activePage.page === 'queue' ? (
+  <QueueView 
+    resource={activePage.resource}
+    onBack={() => setActivePage({ page: 'home' })}
+  />
 ) : (
   role === 'recipient' ? (
     <RecipientView 
