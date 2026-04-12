@@ -55,6 +55,10 @@ const MOCK_RECEIPTS = [
   { id: 'rc2', resourceName: 'Winter Blankets', quantity: 2, date: '2023-09-02', provider: 'Red Cross' },
 ];
 
+//Mock user location for distance calculations
+const userLat = 50;
+const userLng = 50;
+
 export default function App() {
   //////////////////////////
   //This is just here to demonstrate the API connection. You can remove it later.
@@ -74,6 +78,29 @@ export default function App() {
   const [showSignup, setShowSignup] = useState(false);
   const [activePage, setActivePage] = useState({ page: 'home' }); // 'home', 'settings', 'account', 'registerResource'//////////////////
   const [showMenu, setShowMenu] = useState(false);
+
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [filterType, setFilterType] = useState('');
+
+  const filteredResources = [...MOCK_RESOURCES].sort((a, b) => {
+    if (filterType === 'Distance') {
+      const distA = Math.sqrt(
+        Math.pow(a.lat - userLat, 2) + Math.pow(a.lng - userLng, 2)
+      );
+
+      const distB = Math.sqrt(
+        Math.pow(b.lat - userLat, 2) + Math.pow(b.lng - userLng, 2)
+      );
+
+      return distA - distB;
+    }
+
+    if (filterType === 'Name') {
+      return a.name.localeCompare(b.name);
+    }
+
+    return 0;
+});
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
@@ -167,11 +194,61 @@ export default function App() {
               />
             </div>
 
-            <button className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-              <Filter size={18} /> Advanced
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <Filter size={18} /> Advanced
+              </button>
+
+              {showFilterDropdown && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                  
+                  <button
+                    onClick={() => {
+                      setFilterType('Name');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+                  >
+                    Filter by Name
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setFilterType('Distance');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+                  >
+                    Filter by Distance
+                  </button>
+
+                  <div className="border-t border-slate-200" />
+
+                  <button
+                    onClick={() => {
+                      setFilterType('');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-500"
+                  >
+                    Clear Filter
+                  </button>
+
+                </div>
+              )}
+            </div>
           </div>
     )}
+
+    {filterType && (
+      <div className="mb-4 text-xs text-slate-500">
+        Active Filter: <span className="font-semibold">{filterType}</span>
+      </div>
+    )}
+
 {!isAuthenticated ? (
   showSignup ? (
     <Signup 
@@ -202,13 +279,13 @@ export default function App() {
 ) : (
   role === 'recipient' ? (
     <RecipientView 
-      resources={MOCK_RESOURCES} 
+      resources={filteredResources} 
       tickets={MOCK_TICKETS} 
       receipts={MOCK_RECEIPTS} 
     />
   ) : (
     <DistributorView 
-      resources={MOCK_RESOURCES} 
+      resources={filteredResources} 
       setActivePage={setActivePage}
     />
   )
