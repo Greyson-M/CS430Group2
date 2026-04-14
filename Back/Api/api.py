@@ -200,7 +200,8 @@ def login():
     return jsonify({
         "message": "Login successful",
         "token": token,
-        "user_type": user_type
+        "user_type": user_type,
+        "user_id": str(user['_id'])
     }), 200
 
 
@@ -504,8 +505,9 @@ def generate_ticket(current_user_id):
         return jsonify({"error": "Valid item_id and positive quantity are required"}), 400
 
     # Verify the item exists and belongs to this vendor
-    item = mongo.db.items.find_one({"_id": ObjectId(item_id), "vendor_id": ObjectId(current_user_id)})
+    item = mongo.db.items.find_one({"_id": ObjectId(item_id), "vendor_id": current_user_id})
     if not item:
+        print (f"Item with ID {item_id} not found for vendor {current_user_id}")
         return jsonify({"error": "Item not found or does not belong to you"}), 404
 
     # 2. Create the ticket inventory record
@@ -524,6 +526,46 @@ def generate_ticket(current_user_id):
         "ticket_batch_id": str(result.inserted_id)
     }), 201
 
+@app.route('/api/tickets', methods=['GET'])
+def get_ticket_batches():
+    '''
+    Get a list of ticket batches from the database.
+    This endpoint will eventually support filtering options (e.g., by vendor, by item, etc.).
+    For now, it just returns all ticket batches in the database.
+    '''
+    try:
+        # Optional filters
+        vendor_id = request.args.get('vendor_id')
+        item_id = request.args.get('item_id')
+
+        query = {}
+
+        if vendor_id:
+            try:
+                query['vendor_id'] = ObjectId(vendor_id)
+            except Exception:
+                return jsonify({"error": "Invalid vendor_id format"}), 400
+            
+        if item_id:
+            try:
+                query['item_id'] = ObjectId(item_id)
+            except Exception:
+                return jsonify({"error": "Invalid item_id format"}), 400
+
+        tickets_cursor = mongo.db.tickets.find(query)
+        tickets = []
+        for ticket in tickets_cursor:
+            ticket['_id'] = str(ticket['_id'])  # Convert ObjectId to string for JSON serialization
+            if 'vendor_id' in ticket and ticket['vendor_id'] is not None:
+                ticket['vendor_id'] = str(ticket['vendor_id'])  # Convert ObjectId to string for JSON serialization
+            if 'item_id' in ticket and ticket['item_id'] is not None:
+                ticket['item_id'] = str(ticket['item_id'])  # Convert ObjectId to string for JSON serialization
+            tickets.append(ticket)
+        
+        return jsonify(tickets), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/api/tickets/<ticket_batch_id>/request', methods=['POST'])
 @token_required
@@ -532,10 +574,16 @@ def request_ticket(current_user_id, ticket_batch_id):
     WANTER REQUESTS TICKET
     Checks availability, updates state (instead of deleting), and returns a Signed JWT.
     '''
-    # 1. Authorization: Ensure user is a wanter
-    wanter = mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
-    if not wanter:
-        return jsonify({"error": "Unauthorized: Only wanters can request tickets"}), 403
+    # # 1. Authorization: Ensure user is a wanter
+    # wanter = mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
+    # if not wanter:
+    #     return jsonify({"error": "Unauthorized: Only wanters can request tickets"}), 403
+
+    #Authorization: Ensure user exists
+    user = mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)}) or mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        return jsonify({"error": "Unauthorized: User not found"}), 403
+    
 
     try:
         batch_obj_id = ObjectId(ticket_batch_id)
@@ -581,8 +629,113 @@ def request_ticket(current_user_id, ticket_batch_id):
     return jsonify({
         "message": "Ticket claimed successfully",
         "qr_payload": signed_ticket,
-        "ticket_id": claimed_ticket_id
+        "ticket_id": claimed_ticket_id,
+        "item_name: ": mongo.db.items.find_one({"_id": ticket_batch['item_id']})['name']
     }), 200
+
+@app.route('/api/tickets/sync', methods=['POST'])
+@token_required
+def post_redemption_sync(current_user_id):
+    """
+    POST-HOC SYNC: Distributor uploads offline redemption ledger.
+    Expects JSON: { "transactions": [{ "qr_payload": "...", "scanned_at": "..." }] }
+    """
+    # 1. Authorization: Only vendors can sync
+    vendor = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
+    if not vendor:
+        return jsonify({"error": "Unauthorized: Only distributors can perform post-hoc sync"}), 403
+
+    data = request.get_json()
+    transactions = data.get('transactions', [])
+
+    if not isinstance(transactions, list) or len(transactions) == 0:
+        return jsonify({"error": "A non-empty list of transactions is required"}), 400
+
+    # Load the public key for RS256 verification
+    try:
+        with open('jwtRS256.key.pub', 'r') as f:
+            PUBLIC_KEY = f.read()
+    except FileNotFoundError:
+        return jsonify({"error": "Server configuration error: public key not found"}), 500
+
+    processed = []
+    flagged = []
+    failed = []
+    redeemed_count = 0
+    ticket_ids_in_batch = []
+
+    for idx, txn in enumerate(transactions):
+        qr_payload = txn.get('qr_payload')
+        scanned_at = txn.get('scanned_at', datetime.datetime.utcnow().isoformat())
+
+        if not qr_payload:
+            failed.append({"index": idx, "reason": "Missing qr_payload"})
+            continue
+
+        # 2. Verify JWT signature
+        try:
+            ticket_data = jwt.decode(qr_payload, PUBLIC_KEY, algorithms=["RS256"])
+        except jwt.ExpiredSignatureError:
+            failed.append({"index": idx, "reason": "Ticket JWT has expired", "flag": "EXPIRED"})
+            mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "raw_payload": qr_payload[:100], "scanned_at": scanned_at, "status": "REJECTED", "reason": "EXPIRED", "synced_at": datetime.datetime.utcnow()})
+            continue
+        except jwt.InvalidTokenError:
+            failed.append({"index": idx, "reason": "Invalid or tampered JWT signature", "flag": "INVALID_SIGNATURE"})
+            mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "raw_payload": qr_payload[:100], "scanned_at": scanned_at, "status": "REJECTED", "reason": "INVALID_SIGNATURE", "synced_at": datetime.datetime.utcnow()})
+            continue
+
+        ticket_id = ticket_data.get('ticket_id')
+        item_id = ticket_data.get('item_id')
+        wanter_id = ticket_data.get('wanter_id')
+
+        if not ticket_id:
+            failed.append({"index": idx, "reason": "Decoded JWT missing ticket_id"})
+            continue
+
+        # 3. Intra-batch duplicate check
+        if ticket_id in ticket_ids_in_batch:
+            flagged.append({"index": idx, "ticket_id": ticket_id, "reason": "DUPLICATE_IN_BATCH", "detail": "Same ticket appeared multiple times in this sync batch"})
+            mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "FLAGGED", "reason": "DUPLICATE_IN_BATCH", "synced_at": datetime.datetime.utcnow()})
+            continue
+        ticket_ids_in_batch.append(ticket_id)
+
+        # 4. Check claimed_ticket record
+        try:
+            claimed_ticket = mongo.db.claimed_tickets.find_one({"_id": ObjectId(ticket_id)})
+        except Exception:
+            failed.append({"index": idx, "ticket_id": ticket_id, "reason": "Invalid ticket_id format"})
+            continue
+
+        if not claimed_ticket:
+            flagged.append({"index": idx, "ticket_id": ticket_id, "reason": "TICKET_NOT_FOUND", "detail": "No matching claimed ticket record in database"})
+            mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "FLAGGED", "reason": "TICKET_NOT_FOUND", "synced_at": datetime.datetime.utcnow()})
+            continue
+
+        # 5. Already redeemed check
+        current_status = claimed_ticket.get('status', '')
+        if current_status == 'Redeemed':
+            flagged.append({"index": idx, "ticket_id": ticket_id, "reason": "ALREADY_REDEEMED", "detail": "Ticket was already marked as redeemed", "original_redeemed_at": str(claimed_ticket.get('redeemed_at', 'unknown'))})
+            mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "FLAGGED", "reason": "ALREADY_REDEEMED", "synced_at": datetime.datetime.utcnow()})
+            continue
+
+        # 6. Mark as Redeemed
+        mongo.db.claimed_tickets.update_one({"_id": ObjectId(ticket_id)}, {"$set": {"status": "Redeemed", "redeemed_at": datetime.datetime.utcnow(), "redeemed_by_vendor": ObjectId(current_user_id), "scanned_at": scanned_at}})
+
+        # 7. Update ticket batch quantities
+        batch_id = claimed_ticket.get('ticket_batch_id')
+        if batch_id:
+            mongo.db.tickets.update_one({"_id": batch_id}, {"$inc": {"total_qty": -1}})
+
+        # 8. Log successful redemption
+        mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "REDEEMED", "synced_at": datetime.datetime.utcnow()})
+
+        redeemed_count += 1
+        processed.append({"index": idx, "ticket_id": ticket_id, "item_id": item_id, "status": "Redeemed"})
+
+    # 9. Fraud report
+    fraud_report = {"sync_summary": {"total_submitted": len(transactions), "successfully_redeemed": redeemed_count, "flagged_count": len(flagged), "failed_count": len(failed)}, "processed": processed, "flagged": flagged, "failed": failed, "synced_at": datetime.datetime.utcnow().isoformat()}
+
+    return jsonify(fraud_report), 200
 
 @app.route('/api/test_cases')
 def test_cases():
@@ -595,3 +748,10 @@ def test_cases():
 
     TesterObject = Tester(client)
     return TesterObject.run_all_tests()
+
+# post /api/items {"vendor_id": "69ddbb39703cc3732581b4d9", "item_name": "apple"} true
+# post /api/tickets {"item_id": "69ddbc19703cc3732581b4de", "quantity": 100} true
+# 69ddbc19703cc3732581b4de
+# 69ddbb39703cc3732581b4d9
+# post /api/tickets/69ddbd5ce9b6ef2f497d44c0/request true
+# post /api/tickets/sync {"transactions": [{"qr_payload": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0aWNrZXRfaWQiOiI2OWRkYzI5MThkZTZhZWY3NzRmMTY0ZDAiLCJpdGVtX2lkIjoiNjlkZGJjMTk3MDNjYzM3MzI1ODFiNGRlIiwid2FudGVyX2lkIjoiNjlkZGJiMzk3MDNjYzM3MzI1ODFiNGQ5IiwiZXhwIjoxNzc4NzMyOTQ1fQ.tgj8YB20-2pJXKdcftk7ql6xkQthHziHk5aqckAwHBQpxZGlm02tj2ap6Obd5gABufV_xPizCA8inRqNxAW3UX0yz_hUUrTKBvP5lE4Q0Y00gjyvd7Cga8SeLMYiH3nT2ii78tGFHzonRkql_oZDsjL6LGYcqfcTSoZUjSHCfdlII2RjDCdf3r89HfH_-n6rQwnXOLkSx8NbQMlKjMqcrCu2hAp5HVeOCkyvpxxXrNMXqLk0tqEKn1j3fZjQc5qCiMM8uye9lVZCxpMZIKBtu4LZYCAuHSQE1_fnqokhKTEATmyt60rkcjJnvyLo8LjfzPXpBQryFM4EzG0jhBhjXQ", "scanned_at": "2024-07-01T12:00:00Z"}]} true

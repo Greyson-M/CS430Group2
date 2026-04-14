@@ -38,10 +38,12 @@ export default function Login({ onLogin, onSwitchToSignup }) {
       console.log("Login successful, received data:", data);
       const user_type = data.user_type;
       const token = data.token;
+      const user_id = data.user_id;
 
       // Store the token in localStorage for future requests
       localStorage.setItem("authToken", token);
       localStorage.setItem("userType", user_type);
+      localStorage.setItem("userId", user_id);
 
       // alert("Login successful!");
       onLogin(user_type); // Tell App.js that login succeeded and pass the user type

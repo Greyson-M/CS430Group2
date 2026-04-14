@@ -206,6 +206,123 @@ fetch('/api/protected-endpoint', {
 
 ---
 
+## Ticketing (`/api/tickets`)
+
+### Generate Ticket Batch
+* **Endpoint:** `POST /api/tickets`
+* **Description:** Creates a new pool of available tickets (a "batch") for a specific item. Only the vendor who owns the item can generate tickets for it. The batch tracks total and available quantities.
+* **Requires Auth:** Yes (`Authorization: Bearer <token>`)
+* **Request Body (JSON):**
+    ```json
+    {
+        "item_id": "64a7c1a2e4b0123456789def",
+        "quantity": 100
+    }
+    ```
+* **Success Response (201 Created):**
+    ```json
+    {
+        "message": "Ticket inventory generated successfully",
+        "ticket_batch_id": "64a7d3b4e4b0123456789aaa"
+    }
+    ```
+* **Error Responses:**
+    * `403 Forbidden` if the authenticated user is not a vendor.
+    * `400 Bad Request` if `item_id` is missing or `quantity` is not a positive integer.
+    * `404 Not Found` if the item does not exist or does not belong to the vendor.
+
+### Request Ticket (Claim)
+* **Endpoint:** `POST /api/tickets/<ticket_batch_id>/request`
+* **Description:** Allows a wanter (recipient) to claim one ticket from an available batch. Atomically decrements the batch's `available_qty`, creates a `claimed_ticket` record with status `"Pending Redemption"`, and returns an RS256-signed JWT (the QR code payload) that can be verified offline by the distributor.
+* **Requires Auth:** Yes (`Authorization: Bearer <token>`)
+* **Success Response (200 OK):**
+    ```json
+    {
+        "message": "Ticket claimed successfully",
+        "qr_payload": "eyJhbGciOiJSUzI1NiIsInR5c...",
+        "ticket_id": "64a7e5c6e4b0123456789bbb"
+    }
+    ```
+* **Error Responses:**
+    * `403 Forbidden` if the authenticated user is not a wanter.
+    * `400 Bad Request` if the ticket batch is sold out or the `ticket_batch_id` is invalid.
+
+### Post-Hoc Redemption Sync
+* **Endpoint:** `POST /api/tickets/sync`
+* **Description:** Processes an offline redemption ledger uploaded by a distributor. When a distributor scans QR codes offline, the scanned payloads are stored locally on the device. When internet connectivity is restored, this endpoint is called to sync the ledger with the server. For each transaction, the endpoint:
+    1. **Verifies** the RS256 JWT signature using the server's public key.
+    2. **Detects fraud**: duplicate tickets within the same batch, tickets already redeemed in a prior sync, tickets not found in the database, expired JWTs, and tampered/invalid signatures.
+    3. **Updates** the `claimed_tickets` collection, setting status to `"Redeemed"` with a timestamp.
+    4. **Decrements** the ticket batch's `total_qty` for each successful redemption.
+    5. **Logs** every transaction (success, flagged, or rejected) to the `sync_logs` collection.
+    6. **Returns** a fraud report summarizing the results.
+* **Requires Auth:** Yes (`Authorization: Bearer <token>`) -- Vendor (distributor) only.
+* **Request Body (JSON):**
+    ```json
+    {
+        "transactions": [
+            {
+                "qr_payload": "eyJhbGciOiJSUzI1NiIsInR5c...",
+                "scanned_at": "2026-04-10T14:30:00Z"
+            },
+            {
+                "qr_payload": "eyJhbGciOiJSUzI1NiIsInR5c...",
+                "scanned_at": "2026-04-10T14:31:00Z"
+            }
+        ]
+    }
+    ```
+    * `qr_payload` (required): The RS256-signed JWT string from the scanned QR code.
+    * `scanned_at` (optional): ISO 8601 timestamp of when the QR code was scanned offline. Defaults to current server time if omitted.
+* **Success Response (200 OK):**
+    ```json
+    {
+        "sync_summary": {
+            "total_submitted": 5,
+            "successfully_redeemed": 3,
+            "flagged_count": 1,
+            "failed_count": 1
+        },
+        "processed": [
+            {
+                "index": 0,
+                "ticket_id": "64a7e5c6e4b0123456789bbb",
+                "item_id": "64a7c1a2e4b0123456789def",
+                "status": "Redeemed"
+            }
+        ],
+        "flagged": [
+            {
+                "index": 3,
+                "ticket_id": "64a7e5c6e4b0123456789bbb",
+                "reason": "ALREADY_REDEEMED",
+                "detail": "Ticket was already marked as redeemed"
+            }
+        ],
+        "failed": [
+            {
+                "index": 4,
+                "reason": "Invalid or tampered JWT signature",
+                "flag": "INVALID_SIGNATURE"
+            }
+        ],
+        "synced_at": "2026-04-13T18:00:00.000000"
+    }
+    ```
+* **Fraud Flag Types:**
+    * `DUPLICATE_IN_BATCH` -- The same ticket appeared multiple times in the submitted transaction list.
+    * `ALREADY_REDEEMED` -- The ticket was already marked as redeemed in a previous sync.
+    * `TICKET_NOT_FOUND` -- No matching claimed ticket record exists in the database.
+    * `EXPIRED` -- The ticket's JWT has passed its expiration date.
+    * `INVALID_SIGNATURE` -- The JWT signature is invalid or has been tampered with.
+* **Error Responses:**
+    * `403 Forbidden` if the authenticated user is not a vendor.
+    * `400 Bad Request` if `transactions` is missing or empty.
+    * `500 Internal Server Error` if the server's public key file is not found.
+
+
+---
+
 ## System / Utilities
 
 ### Get Current Time
