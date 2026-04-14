@@ -31,6 +31,9 @@ import DistributorView from './views/DistributorView';
 import Login from './views/Login';
 import Signup from './views/Signup';
 import SettingsPage from './views/SettingsPage';
+import RegisterResource from './views/RegisterResource';
+import LaunchScanner from './views/LaunchScanner';
+import QueueView from './views/QueueView';
 
 import Card from './components/Card';
 import Badge from './components/Badge';
@@ -54,12 +57,40 @@ const MOCK_RECEIPTS = [
   { id: 'rc2', resourceName: 'Winter Blankets', quantity: 2, date: '2023-09-02', provider: 'Red Cross' },
 ];
 
+//Mock user location for distance calculations
+const userLat = 50;
+const userLng = 50;
+
 export default function App() {
   const [role, setRole] = useState('recipient'); // 'recipient' or 'distributor'
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
-  const [activePage, setActivePage] = useState('home'); // 'home', 'settings', 'account'
+  const [activePage, setActivePage] = useState({ page: 'home' }); // 'home', 'settings', 'account', 'registerResource'//////////////////
+  const [showMenu, setShowMenu] = useState(false);
+
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [filterType, setFilterType] = useState('');
+
+  const filteredResources = [...MOCK_RESOURCES].sort((a, b) => {
+    if (filterType === 'Distance') {
+      const distA = Math.sqrt(
+        Math.pow(a.lat - userLat, 2) + Math.pow(a.lng - userLng, 2)
+      );
+
+      const distB = Math.sqrt(
+        Math.pow(b.lat - userLat, 2) + Math.pow(b.lng - userLng, 2)
+      );
+
+      return distA - distB;
+    }
+
+    if (filterType === 'Name') {
+      return a.name.localeCompare(b.name);
+    }
+
+    return 0;
+});
 
   const [apiStatus, setApiStatus] = useState('checking'); // 'online', 'offline', 'checking'
   const [tokenStatus, setTokenStatus] = useState('none');  // 'valid', 'invalid', 'none', 'checking'
@@ -155,53 +186,73 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
-              <Globe size={14} />
-              <select 
-                className="bg-transparent border-none focus:ring-0 cursor-pointer"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option>English</option>
-                <option>Spanish</option>
-                <option>French</option>
-              </select>
-            </div>
+  {isAuthenticated && (
+    <>
+      <div className="h-8 w-px bg-slate-200 mx-1"></div>
+
+      {/* Mode Toggle */}
+      <button 
+        onClick={() => setRole(role === 'recipient' ? 'distributor' : 'recipient')}
+        className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-800 transition-colors"
+      >
+        Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
+      </button>
+
+      {/* User Dropdown */}
+      <div className="relative">
+        {/* Profile Button */}
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-sm text-slate-600 hover:bg-slate-200 transition cursor-pointer"
+        >
+          <User size={16} />
+        </button>
+
+        {/* Dropdown Menu */}
+        {showMenu && (
+          <div className="absolute right-0 mt-2 w-40 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
             
-            <div className="h-8 w-px bg-slate-200 mx-1"></div>
-            
-            <button 
-              onClick={() => setRole(role === 'recipient' ? 'distributor' : 'recipient')}
-              className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-800 transition-colors"
+            <button
+              onClick={() => {
+                setActivePage({ page: "home" });
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
             >
-              Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
+              Home
             </button>
-            
-            <div className="hidden sm:flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-medium text-slate-600">
-    <User size={14} />
-    <select
-      className="bg-transparent border-none focus:ring-0 cursor-pointer"
-      value={''} // default value, you can manage state if you want
-      onChange={(e) => {
-        const value = e.target.value;
-        if (value === 'logout') handleLogout();
-        else setActivePage(value);
-      }}
-    >
-      <option value="" disabled>
-        Profile
-      </option>
-      <option value="account">Account</option>
-      <option value="settings">Settings</option>
-      <option value="logout">Logout</option>
-    </select>
-  </div>
+
+            <button
+              onClick={() => {
+                setActivePage({ page: "settings" });
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+            >
+              Settings
+            </button>
+
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                setActivePage({ page: "home" });
+                setShowMenu(false);
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-600"
+            >
+              Logout
+            </button>
           </div>
+        )}
+      </div>
+    </>
+  )}
+</div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-      {isAuthenticated && activePage !== 'settings' && (
+      {isAuthenticated && activePage.page !== 'settings' && (
           <div className="mb-8 flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search 
@@ -215,11 +266,61 @@ export default function App() {
               />
             </div>
 
-            <button className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-              <Filter size={18} /> Advanced
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="px-4 py-3 bg-white border border-slate-200 rounded-2xl flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                <Filter size={18} /> Advanced
+              </button>
+
+              {showFilterDropdown && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                  
+                  <button
+                    onClick={() => {
+                      setFilterType('Name');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+                  >
+                    Filter by Name
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setFilterType('Distance');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm"
+                  >
+                    Filter by Distance
+                  </button>
+
+                  <div className="border-t border-slate-200" />
+
+                  <button
+                    onClick={() => {
+                      setFilterType('');
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-500"
+                  >
+                    Clear Filter
+                  </button>
+
+                </div>
+              )}
+            </div>
           </div>
     )}
+
+    {filterType && (
+      <div className="mb-4 text-xs text-slate-500">
+        Active Filter: <span className="font-semibold">{filterType}</span>
+      </div>
+    )}
+
 {!isAuthenticated ? (
   showSignup ? (
     <Signup 
@@ -232,17 +333,33 @@ export default function App() {
       onSwitchToSignup={() => setShowSignup(true)}
     />
   )
-) : activePage === 'settings' ? (
-  <SettingsPage />
+) : activePage.page === 'settings' ? (
+  <SettingsPage 
+    setActivePage={setActivePage}
+    language={language}
+    setLanguage={setLanguage}
+  />
+) : activePage.page === 'registerResource' ? (
+  <RegisterResource setActivePage={setActivePage} />
+) : activePage.page === 'launchScanner' ? (
+  <LaunchScanner onBack={() => setActivePage({ page: 'home' })} />
+) : activePage.page === 'queue' ? (
+  <QueueView 
+    resource={activePage.resource}
+    onBack={() => setActivePage({ page: 'home' })}
+  />
 ) : (
   role === 'recipient' ? (
     <RecipientView 
-      resources={MOCK_RESOURCES} 
+      resources={filteredResources} 
       tickets={MOCK_TICKETS} 
       receipts={MOCK_RECEIPTS} 
     />
   ) : (
-    <DistributorView resources={MOCK_RESOURCES} />
+    <DistributorView 
+      resources={filteredResources} 
+      setActivePage={setActivePage}
+    />
   )
 )}
       </main>
