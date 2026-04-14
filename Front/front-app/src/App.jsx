@@ -24,6 +24,8 @@ import {
   MapPin
 } from 'lucide-react';
 
+import 'leaflet/dist/leaflet.css';
+
 import RecipientView from './views/RecipientView';
 import DistributorView from './views/DistributorView';
 import Login from './views/Login';
@@ -60,18 +62,6 @@ const userLat = 50;
 const userLng = 50;
 
 export default function App() {
-  //////////////////////////
-  //This is just here to demonstrate the API connection. You can remove it later.
-  //This is generally how we will fetch data from the backend
-  const [currentTime, setCurrentTime] = useState(0);
-  useEffect(() => {
-    fetch('/api/time').then(res => res.json()).then(data => setCurrentTime(data.time));
-  }, []);
-
-  console.log(currentTime); // For debugging: check if time is being fetched correctly
-///////////////////////////
-
-
   const [role, setRole] = useState('recipient'); // 'recipient' or 'distributor'
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
@@ -101,6 +91,88 @@ export default function App() {
 
     return 0;
 });
+
+  const [apiStatus, setApiStatus] = useState('checking'); // 'online', 'offline', 'checking'
+  const [tokenStatus, setTokenStatus] = useState('none');  // 'valid', 'invalid', 'none', 'checking'
+  const [lastChecked, setLastChecked] = useState(null);   // Timestamp of last status check
+
+  // Check for existing token on app load
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    const userType = localStorage.getItem("userType");
+    if (token && userType) {
+      setIsAuthenticated(true);
+      setRole(userType === "vendors" ? "distributor" : "recipient");
+    }
+  }, []);
+
+  // Handle login - receives user_type from Login component
+  const handleLogin = (userType) => {
+    setIsAuthenticated(true);
+    setRole(userType === "vendors" ? "distributor" : "recipient");
+    setTokenStatus('valid');
+    setLastChecked(new Date());
+  };
+
+  // Handle logout - clear storage
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("userType");
+    setIsAuthenticated(false);
+    setRole(null);
+    setTokenStatus('none');
+    setLastChecked(new Date());
+  };
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      // Check API connectivity
+      try {
+        const res = await fetch('http://localhost:5000/api/time');
+        if (res.ok) {
+          setApiStatus('online');
+        } else {
+          setApiStatus('offline');
+        }
+      } catch {
+        setApiStatus('offline');
+      }
+
+      // Check token validity
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        setTokenStatus('none');
+        return;
+      }
+
+      try {
+        const res = await fetch('http://localhost:5000/api/validate-token', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (res.ok) {
+          setTokenStatus('valid');
+        } else {
+          setTokenStatus('invalid');
+          // Token is expired/invalid — log the user out
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userType');
+          setIsAuthenticated(false);
+          setRole(null);
+        }
+      } catch {
+        setTokenStatus('invalid');
+      }
+      setLastChecked(new Date());
+  };
+
+  checkStatus();
+  const interval = setInterval(checkStatus, 30000); // Re-check every 30 seconds
+  return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 font-sans"> 
@@ -252,12 +324,12 @@ export default function App() {
 {!isAuthenticated ? (
   showSignup ? (
     <Signup 
-      onSignup={() => setIsAuthenticated(true)}
+      onSignup={() => handleLogin("wanters")} // or pass user_type from Signup too
       onSwitchToLogin={() => setShowSignup(false)}
     />
   ) : (
     <Login 
-      onLogin={() => setIsAuthenticated(true)}
+      onLogin={handleLogin}
       onSwitchToSignup={() => setShowSignup(true)}
     />
   )
@@ -293,11 +365,47 @@ export default function App() {
       </main>
 
       <footer className="max-w-6xl mx-auto px-4 py-8 text-center">
-        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-xs font-medium border border-emerald-100">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-          Status: Operational | Verified Local Sync
+      <div className="inline-flex items-center gap-4">
+        {/* API Status */}
+        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${
+          apiStatus === 'online'
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+            : apiStatus === 'offline'
+            ? 'bg-red-50 text-red-600 border-red-100'
+            : 'bg-slate-50 text-slate-500 border-slate-200'
+        }`}>
+          <div className={`w-2 h-2 rounded-full ${
+            apiStatus === 'online' ? 'bg-emerald-500 animate-pulse'
+            : apiStatus === 'offline' ? 'bg-red-500'
+            : 'bg-slate-400 animate-pulse'
+          }`}></div>
+          API: {apiStatus === 'online' ? 'Connected' : apiStatus === 'offline' ? 'Disconnected' : 'Checking...'}
         </div>
-      </footer>
+
+        {/* Token Status */}
+        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${
+          tokenStatus === 'valid'
+            ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+            : tokenStatus === 'invalid'
+            ? 'bg-red-50 text-red-600 border-red-100'
+            : tokenStatus === 'none'
+            ? 'bg-slate-50 text-slate-500 border-slate-200'
+            : 'bg-slate-50 text-slate-500 border-slate-200'
+        }`}>
+          <div className={`w-2 h-2 rounded-full ${
+            tokenStatus === 'valid' ? 'bg-emerald-500'
+            : tokenStatus === 'invalid' ? 'bg-red-500'
+            : 'bg-slate-400'
+          }`}></div>
+          Session: {tokenStatus === 'valid' ? 'Authenticated' : tokenStatus === 'invalid' ? 'Expired' : tokenStatus === 'none' ? 'Not Logged In' : 'Checking...'}
+        </div>
+        {lastChecked && (
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border bg-slate-50 text-slate-500 border-slate-200">
+            Last checked: {lastChecked.toLocaleTimeString()}
+          </div>
+        )}
+      </div>
+    </footer>
     </div>
   );
 }

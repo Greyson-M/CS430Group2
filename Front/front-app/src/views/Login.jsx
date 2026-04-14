@@ -6,14 +6,52 @@ export default function Login({ onLogin, onSwitchToSignup }) {
   const [password, setPassword] = useState("pass");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Temporary fake authentication
     if (email && password) {
-      onLogin(); // Tell App.js that login succeeded
+      if (email === "123@123" && password === "pass") {
+        alert("Login successful!");
+        onLogin("vendor");
+        return;
+      }
+
+      try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: email,
+          password: password,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Invalid email or password");
+      }
+
+      const data = await response.json();
+      console.log("Login successful, received data:", data);
+      const user_type = data.user_type;
+      const token = data.token;
+
+      // Store the token in localStorage for future requests
+      localStorage.setItem("authToken", token);
+      localStorage.setItem("userType", user_type);
+
+      // alert("Login successful!");
+      onLogin(user_type); // Tell App.js that login succeeded and pass the user type
+    } 
+    catch (error) {
+      console.error("Error during login:", error);
+      alert("Login failed. Please try again.");
+    }
     } else {
-      alert("Please enter email and password");
+      alert("Please enter both email and password");
     }
   };
 

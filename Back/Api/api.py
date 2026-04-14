@@ -8,6 +8,12 @@ from hashlib import sha256
 import jwt
 from functools import wraps
 import datetime
+from flask_cors import CORS
+import secrets
+
+# Load the private key for signing tickets (Ensure the file path is correct for your environment)
+with open('jwtRS256.key', 'r') as f:
+    PRIVATE_KEY = f.read()
 
 from test_cases import Tester
 
@@ -15,6 +21,7 @@ from test_cases import Tester
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 app.config['SECRET_KEY'] = 'big_secret_herebig_secret_herebig_secret_herebig_secret_here'  # In production, use a more secure secret key and store it safely (e.g., in environment variables)
 
 # Get the MONGO_URI from the environment and add it to Flask's config
@@ -50,6 +57,20 @@ def token_required(f):
 
     return decorated
 
+#enpoint that takes a authtoken as input and returns whether the token is currently valid (i.e., not expired and properly signed).
+@app.route('/api/validate-token', methods=['POST'])
+@token_required
+def validate_token(current_user_id):
+    return jsonify({"message": "Token is valid", "user_id": current_user_id}), 200
+
+@app.route('/api/invalidate-all-tokens', methods=['GET', 'POST'])   #Technically, should just be a POST or PUT since it is changing server state, but since this is just a testing endpoint and not something that will be exposed to users, it is much easier to test if it is a GET endpoint that can be easily accessed from the browser.
+def invalidate_all_tokens():
+    '''
+    Testing endpoint: Invalidates all existing JWT tokens by rotating the secret key.
+    All users will need to log in again.
+    '''
+    app.config['SECRET_KEY'] = secrets.token_hex(32)
+    return jsonify({"message": "All tokens have been invalidated. Users must log in again."}), 200
 
 @app.route('/api/time')
 def get_current_time():
@@ -137,6 +158,52 @@ def register():
         "id": str(result.inserted_id)
     }), 201
 
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    '''
+    Login a user.
+    Expects a JSON payload with 'username' and 'password'.
+    Example payload:
+    {
+        "username": "vendor123",
+        "password": "securepassword"
+    }
+    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
+    '''
+
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    hashed_password = sha256(password.encode()).hexdigest()
+
+    user_type = None
+    user = mongo.db.vendors.find_one({"username": username, "password": hashed_password})
+    if user:
+        user_type = "vendors"
+    else:
+        user = mongo.db.wanters.find_one({"username": username, "password": hashed_password})
+        if user:
+            user_type = "wanters"
+
+    if not user:
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    # Include user_type in the JWT
+    token = jwt.encode({
+        'user_id': str(user['_id']),
+        'user_type': user_type,
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+    }, app.config['SECRET_KEY'], algorithm="HS256")
+
+    return jsonify({
+        "message": "Login successful",
+        "token": token,
+        "user_type": user_type
+    }), 200
+
+
 @app.route('/api/items', methods=['POST'])
 @token_required
 def create_item(current_user_id):
@@ -164,7 +231,7 @@ def create_item(current_user_id):
         return jsonify({"error": "Item name is required"}), 400
         
     # Insert into the 'items' collection
-    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "fields": fields}
+    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "vendor_id": vendor_id, "fields": fields}
     result = mongo.db.items.insert_one(new_item)
     
     return jsonify({
@@ -208,6 +275,7 @@ def get_items():
         return jsonify(items), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
 @app.route('/api/items/<item_id>', methods=['PUT'])
 @token_required
 def update_item(current_user_id, item_id):
@@ -283,43 +351,6 @@ def delete_item(current_user_id, item_id):
         return jsonify({"error": str(e)}), 500
     
 # Accounts:
-@app.route('/api/login', methods=['POST'])
-def login():
-    '''
-    Login a user.
-    Expects a JSON payload with 'username' and 'password'.
-    Example payload:
-    {
-        "username": "vendor123",
-        "password": "securepassword"
-    }
-    Returns a success message and a token for authentication (for now we can just return the user's ID, but eventually we should implement a more secure token-based system).
-    '''
-
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    hashed_password = sha256(password.encode()).hexdigest()
-
-    #Authenticate against both collections since we don't know if the user is a wanter or a vendor
-    user = mongo.db.vendors.find_one({"username": username, "password": hashed_password
-    }) or mongo.db.wanters.find_one({"username": username, "password": hashed_password})
-    if not user:
-        return jsonify({"error": "Invalid username or password"}), 401
-
-    # Generate a JWT token
-    token = jwt.encode({
-        'user_id': str(user['_id']),
-        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expires in 1 hour
-    }, app.config['SECRET_KEY'], algorithm="HS256")
-
-    # Return success message and user ID as token for now
-    return jsonify({
-        "message": "Login successful",
-        "token": token
-    }), 200
-
 @app.route('/api/user/<user_id>', methods=['GET'])
 @token_required
 def get_user_info(current_user_id, user_id):
@@ -450,6 +481,108 @@ def delete_user(current_user_id, user_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+#------------------------- Ticketing Endpoints -------------------------#
+
+@app.route('/api/tickets', methods=['POST'])
+@token_required
+def generate_ticket(current_user_id):
+    '''
+    HAVER (Vendor) GENERATES TICKET INVENTORY
+    Expects JSON: { "item_id": "...", "quantity": 100 }
+    '''
+    # 1. Authorization: Ensure user is a vendor
+    vendor = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
+    if not vendor:
+        return jsonify({"error": "Unauthorized: Only vendors (Havers) can generate tickets"}), 403
+
+    data = request.get_json()
+    item_id = data.get('item_id')
+    total_qty = data.get('quantity')
+
+    if not item_id or not isinstance(total_qty, int) or total_qty <= 0:
+        return jsonify({"error": "Valid item_id and positive quantity are required"}), 400
+
+    # Verify the item exists and belongs to this vendor
+    item = mongo.db.items.find_one({"_id": ObjectId(item_id), "vendor_id": ObjectId(current_user_id)})
+    if not item:
+        return jsonify({"error": "Item not found or does not belong to you"}), 404
+
+    # 2. Create the ticket inventory record
+    new_ticket_batch = {
+        "vendor_id": ObjectId(current_user_id),
+        "item_id": ObjectId(item_id),
+        "total_qty": total_qty,
+        "available_qty": total_qty, # State management: track available vs total
+        "created_at": datetime.datetime.utcnow()
+    }
+    
+    result = mongo.db.tickets.insert_one(new_ticket_batch)
+    
+    return jsonify({
+        "message": "Ticket inventory generated successfully",
+        "ticket_batch_id": str(result.inserted_id)
+    }), 201
+
+
+@app.route('/api/tickets/<ticket_batch_id>/request', methods=['POST'])
+@token_required
+def request_ticket(current_user_id, ticket_batch_id):
+    '''
+    WANTER REQUESTS TICKET
+    Checks availability, updates state (instead of deleting), and returns a Signed JWT.
+    '''
+    # 1. Authorization: Ensure user is a wanter
+    wanter = mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
+    if not wanter:
+        return jsonify({"error": "Unauthorized: Only wanters can request tickets"}), 403
+
+    try:
+        batch_obj_id = ObjectId(ticket_batch_id)
+    except Exception:
+        return jsonify({"error": "Invalid ticket_batch_id format"}), 400
+
+    # 2. Atomic update: Find batch with available quantity and decrement it by 1
+    # This prevents race conditions if multiple wanters request at the exact same time
+    ticket_batch = mongo.db.tickets.find_one_and_update(
+        {"_id": batch_obj_id, "available_qty": {"$gt": 0}},
+        {"$inc": {"available_qty": -1}},
+        return_document=True
+    )
+
+    if not ticket_batch:
+        return jsonify({"error": "Tickets sold out or invalid ticket batch"}), 400
+
+    # 3. State Management: Create a specific Claimed Ticket record for this user
+    claimed_ticket = {
+        "ticket_batch_id": batch_obj_id,
+        "wanter_id": ObjectId(current_user_id),
+        "item_id": ticket_batch['item_id'],
+        "vendor_id": ticket_batch['vendor_id'],
+        "status": "Pending Redemption", # Changed from immediate deletion to state tracking
+        "claimed_at": datetime.datetime.utcnow()
+    }
+    claim_result = mongo.db.claimed_tickets.insert_one(claimed_ticket)
+    claimed_ticket_id = str(claim_result.inserted_id)
+
+    # 4. Generate the Asymmetric Digitally Signed Ticket (The QR Code payload)
+    # We use RS256 so the offline Haver can verify it using only the Public Key
+    expiration_time = datetime.datetime.utcnow() + datetime.timedelta(days=30) # 30 day expiration
+    
+    ticket_payload = {
+        "ticket_id": claimed_ticket_id,       # Unique ID for local device blacklisting
+        "item_id": str(ticket_batch['item_id']),
+        "wanter_id": current_user_id,
+        "exp": expiration_time                # Prevents forever-valid tickets
+    }
+
+    signed_ticket = jwt.encode(ticket_payload, PRIVATE_KEY, algorithm="RS256")
+
+    return jsonify({
+        "message": "Ticket claimed successfully",
+        "qr_payload": signed_ticket,
+        "ticket_id": claimed_ticket_id
+    }), 200
 
 @app.route('/api/test_cases')
 def test_cases():

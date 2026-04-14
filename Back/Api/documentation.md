@@ -234,3 +234,14 @@ fetch('/api/protected-endpoint', {
 * **Description:** Executes backend unit/integration tests to verify database connections and endpoint functionality.
 * **Requires Auth:** No
 * **Success Response:** Depends on the output of the internal `Tester` class.
+
+---
+
+## Status Code Legend
+* `200 OK` - The request was successful and the server returned the expected data.
+* `201 Created` - The request was successful and a new resource was created as a result.
+* `400 Bad Request` - The server could not understand the request due to invalid syntax or missing required fields.
+* `401 Unauthorized` - Authentication failed due to invalid credentials.
+* `403 Forbidden` - The authenticated user does not have permission to access the requested resource.
+* `404 Not Found` - The requested resource does not exist on the server.
+* `500 Internal Server Error` - An unexpected error occurred on the server while processing the request.
