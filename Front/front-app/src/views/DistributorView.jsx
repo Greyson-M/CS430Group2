@@ -101,9 +101,7 @@ export default function DistributorView({ resources, setActivePage }) {
 
       {showModal && (
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-        
         <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 relative">
-          
           {/* Close Button */}
           <button
             onClick={() => setShowModal(false)}
@@ -111,12 +109,10 @@ export default function DistributorView({ resources, setActivePage }) {
           >
             ✕
           </button>
-
           {/* Title */}
           <h3 className="text-2xl font-bold text-slate-800 mb-6">
             Register Resource
           </h3>
-
           {/* Form */}
           <div className="space-y-4">
             
@@ -130,7 +126,6 @@ export default function DistributorView({ resources, setActivePage }) {
                 className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-
             <div>
               <label className="text-sm font-medium text-slate-600">
                 Quantity
@@ -141,7 +136,6 @@ export default function DistributorView({ resources, setActivePage }) {
                 className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-slate-600">
@@ -153,7 +147,6 @@ export default function DistributorView({ resources, setActivePage }) {
                   className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-
               <div>
                 <label className="text-sm font-medium text-slate-600">
                   Visibility
@@ -164,7 +157,6 @@ export default function DistributorView({ resources, setActivePage }) {
                 </select>
               </div>
             </div>
-
             <div>
               <label className="text-sm font-medium text-slate-600">
                 Pickup Address
@@ -175,7 +167,6 @@ export default function DistributorView({ resources, setActivePage }) {
                 className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
-
           </div>
 
           {/* Actions */}
@@ -186,20 +177,17 @@ export default function DistributorView({ resources, setActivePage }) {
             >
               Cancel
             </button>
-
             <button
               onClick={() => {
                 // later you'll push into resources here
                 setShowModal(false);
               }}
-              className="px-5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 shadow-md"
-            >
-              Register Resource
+              className="px-5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 shadow-md"> Register Resource
             </button>
           </div>
-
         </div>
       </div>
+      
     )}
     </div>
   );
