@@ -40,6 +40,8 @@ import Badge from './components/Badge';
 import MapView from './components/MapView';
 
 // --- Mock Data ---
+
+// TODO (backend): Replace MOCK_RESOURCES with API data
 const MOCK_RESOURCES = [
   { id: 'r1', name: 'Fresh Water Supply', provider: 'Municipal Services', total: 500, remaining: 120, status: 'Public', unit: 'Liters', lat: 40, lng: 30 },
   { id: 'r2', name: 'Emergency Food Kits', provider: 'Community Pantry', total: 200, remaining: 45, status: 'Public', unit: 'Kits', lat: 60, lng: 70 },
@@ -68,11 +70,12 @@ export default function App() {
   const [showSignup, setShowSignup] = useState(false);
   const [activePage, setActivePage] = useState({ page: 'home' }); // 'home', 'settings', 'account', 'registerResource'//////////////////
   const [showMenu, setShowMenu] = useState(false);
+  const [resources, setResources] = useState(MOCK_RESOURCES); // would change with real data from backend 
 
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [filterType, setFilterType] = useState('');
 
-  const filteredResources = [...MOCK_RESOURCES].sort((a, b) => {
+  const filteredResources = [...resources].sort((a, b) => {
     if (filterType === 'Distance') {
       const distA = Math.sqrt(
         Math.pow(a.lat - userLat, 2) + Math.pow(a.lng - userLng, 2)
@@ -91,6 +94,12 @@ export default function App() {
 
     return 0;
 });
+
+  // TODO (backend): Replace with POST /api/resources
+  // Should return created resource with real database ID
+  const addResource = (newResource) => {
+  setResources(prev => [...prev, newResource]);
+  };
 
   const [apiStatus, setApiStatus] = useState('checking'); // 'online', 'offline', 'checking'
   const [tokenStatus, setTokenStatus] = useState('none');  // 'valid', 'invalid', 'none', 'checking'
@@ -340,7 +349,9 @@ export default function App() {
     setLanguage={setLanguage}
   />
 ) : activePage.page === 'registerResource' ? (
-  <RegisterResource setActivePage={setActivePage} />
+  // TODO (backend): This page will POST to /api/resources
+  // Currently uses frontend state only
+  <RegisterResource setActivePage={setActivePage} addResource={addResource} />
 ) : activePage.page === 'launchScanner' ? (
   <LaunchScanner onBack={() => setActivePage({ page: 'home' })} />
 ) : activePage.page === 'queue' ? (

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
-export default function RegisterResource({ setActivePage }) {
+export default function RegisterResource({ setActivePage, addResource }) {
   const [formData, setFormData] = useState({
     name: "",
     provider: "",
+    location: "",
     quantity: "",
     unit: "",
     status: "Public",
@@ -17,14 +18,27 @@ export default function RegisterResource({ setActivePage }) {
     });
   };
 
+  // TODO (backend): This form will eventually submit to POST /api/resources
+  // Currently updates frontend state only
   const handleSubmit = (e) => {
     e.preventDefault();
-    console.log("Submitted Resource:", formData);
 
-    // TODO: send to backend later
-
-    // Go back to main page after submit
-    setActivePage("home");
+    const newResource = {
+      id: Date.now(), // temp ID
+      name: formData.name,
+      total: Number(formData.quantity),
+      remaining: Number(formData.quantity),
+      status: formData.status,
+      provider: formData.provider,
+      location: formData.location,
+      unit: formData.unit,
+    };
+  
+  // TODO (backend): Replace addResource with API call
+  // POST /api/resources
+  // Expected response: created resource object with DB-generated ID
+  addResource(newResource); ///////////
+  setActivePage({ page: "home" });
   };
 
   return (
@@ -32,7 +46,7 @@ export default function RegisterResource({ setActivePage }) {
       
       {/* Back Button */}
       <button
-        onClick={() => setActivePage("home")}
+        onClick={() => setActivePage({ page: "home" })}
         className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600 mb-4"
       >
         <ArrowLeft size={16} />

@@ -13,7 +13,6 @@ import {
 import Card from '../components/Card';
 
 export default function DistributorView({ resources, setActivePage }) {
-  const [showModal, setShowModal] = useState(false);
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -21,7 +20,7 @@ export default function DistributorView({ resources, setActivePage }) {
           <h2 className="text-2xl font-bold text-slate-900 text-slate-800">Supply Distribution Hub</h2>
           <p className="text-slate-500">Coordinate tickets and community supply levels.</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium shadow-lg shadow-emerald-200/50">
+        <button onClick={() => setActivePage({ page: 'registerResource' })} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium shadow-lg shadow-emerald-200/50">
           <Plus size={20} /> Register Resource
         </button>
       </div>
@@ -97,98 +96,6 @@ export default function DistributorView({ resources, setActivePage }) {
         </div>
         <div className="absolute right-0 top-0 w-64 h-64 bg-emerald-500/10 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2"></div>
       </div>
-
-
-      {showModal && (
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 relative">
-          {/* Close Button */}
-          <button
-            onClick={() => setShowModal(false)}
-            className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
-          >
-            ✕
-          </button>
-          {/* Title */}
-          <h3 className="text-2xl font-bold text-slate-800 mb-6">
-            Register Resource
-          </h3>
-          {/* Form */}
-          <div className="space-y-4">
-            
-            <div>
-              <label className="text-sm font-medium text-slate-600">
-                Resource Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Bottled Water"
-                className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-600">
-                Quantity
-              </label>
-              <input
-                type="number"
-                placeholder="e.g. 100"
-                className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Zip Code
-                </label>
-                <input
-                  type="text"
-                  placeholder="26505"
-                  className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-600">
-                  Visibility
-                </label>
-                <select className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                  <option>Public</option>
-                  <option>Private</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-600">
-                Pickup Address
-              </label>
-              <input
-                type="text"
-                placeholder="123 Main St, Morgantown, WV"
-                className="w-full mt-1 border border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-end gap-3 mt-8">
-            <button
-              onClick={() => setShowModal(false)}
-              className="px-5 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                // later you'll push into resources here
-                setShowModal(false);
-              }}
-              className="px-5 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 shadow-md"> Register Resource
-            </button>
-          </div>
-        </div>
-      </div>
-      
-    )}
     </div>
   );
 };
