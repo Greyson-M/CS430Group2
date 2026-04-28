@@ -438,9 +438,33 @@ if __name__ == "__main__":
         if com.lower() == 'run':
             print("Running all tests...")
             report = tester.run_all_tests()
+            
+            # Map of test keys to their human-readable descriptions
+            test_descriptions = {
+                "test_utilities": "Check if the API is running (/api/time)",
+                "test_user_registration": "Register a new vendor account",
+                "test_user_login": "Log in with the newly created vendor account",
+                "test_item_insertion_invalid": "Fail to create an item with an invalid vendor ID",
+                "test_item_insertion_valid_vendor": "Successfully create a new item",
+                "test_get_items": "Retrieve the list of items",
+                "test_update_item": "Update the created item's details",
+                "test_delete_item": "Delete the created item",
+                "test_create_ticket_item": "Create a specific item for ticketing",
+                "test_generate_ticket_batch": "Generate a batch of tickets",
+                "test_request_tickets": "Request QR codes for the generated tickets",
+                "test_sync_clean": "Test successful sync of valid ticket scans",
+                "test_sync_fraud": "Test fraud detection for tampered/duplicate ticket scans",
+                "test_cleanup_ticket_item": "Clean up the ticket item",
+                "test_update_user": "Update the vendor user account",
+                "test_get_user": "Fetch the vendor user details",
+                "test_delete_user": "Delete the vendor user account (Cleanup)"
+            }
+
             for test, result in report.items():
                 status = "PASS" if result == "Passed" else ("SKIP" if result == "Skipped" else "FAIL")
-                print(f"  [{status}] {test}")
+                description = test_descriptions.get(test, "No description provided")
+                # Format to beautifully align test names and their descriptions
+                print(f"  [{status}] {test:<32} - {description}")
             continue
 
         try:

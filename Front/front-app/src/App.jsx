@@ -64,7 +64,7 @@ const userLat = 50;
 const userLng = 50;
 
 export default function App() {
-  const [role, setRole] = useState('recipient'); // 'recipient' or 'distributor'
+  const [role, setRole] = useState('recipient'); // 'recipient' or 'Holder'
   const [language, setLanguage] = useState('English');
   const [isAuthenticated, setIsAuthenticated] = useState(false); // For demo purposes, we start as authenticated
   const [showSignup, setShowSignup] = useState(false);
@@ -201,10 +201,10 @@ export default function App() {
 
       {/* Mode Toggle */}
       <button 
-        onClick={() => setRole(role === 'recipient' ? 'distributor' : 'recipient')}
+        onClick={() => setRole(role === 'recipient' ? 'Holder' : 'recipient')}
         className="text-xs font-bold uppercase tracking-wider text-emerald-600 hover:text-emerald-800 transition-colors"
       >
-        Mode: {role === 'recipient' ? 'Recipient' : 'Distributor'}
+        Mode: {role === 'recipient' ? 'Recipient' : 'Holder'}
       </button>
 
       {/* User Dropdown */}
