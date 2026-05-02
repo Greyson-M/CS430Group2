@@ -222,9 +222,10 @@ def create_item(current_user_id):
         return jsonify({"error": "Unauthorized: You can only create items for your own account"}), 403
 
     # Validate that the vendor_id exists in the 'vendors' collection
-    if not vendor_id or not mongo.db.vendors.find_one({"_id": ObjectId(vendor_id)}):
-        return jsonify({"error": "Invalid or missing vendor_id. Make sure that the vendor exists."}), 400
-
+    user_exists = mongo.db.vendors.find_one({"_id": ObjectId(vendor_id)}) or mongo.db.wanters.find_one({"_id": ObjectId(vendor_id)})
+    if not vendor_id or not user_exists:
+        return jsonify({"error": "Invalid or missing current_user_id. Make sure that the user exists."}), 400
+    
     name = data.get('item_name')
     fields = data.get('fields', {}) # Defaults to an empty object if no fields are provided
     
@@ -493,10 +494,10 @@ def generate_ticket(current_user_id):
     Expects JSON: { "item_id": "...", "quantity": 100 }
     '''
     # 1. Authorization: Ensure user is a vendor
-    vendor = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
-    if not vendor:
-        return jsonify({"error": "Unauthorized: Only vendors (Havers) can generate tickets"}), 403
-
+    user = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)}) or mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        return jsonify({"error": "Unauthorized: User not found"}), 403
+    
     data = request.get_json()
     item_id = data.get('item_id')
     total_qty = data.get('quantity')
@@ -566,6 +567,25 @@ def get_ticket_batches():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/tickets/mine', methods=['GET'])
+@token_required
+def get_my_active_tickets(current_user_id):
+    """
+    Returns a list of ticket IDs for the current user that are still Pending Redemption.
+    Useful for the frontend to auto-remove offline saved tickets that have been synced by the vendor.
+    """
+    try:
+        active_claims = mongo.db.claimed_tickets.find({
+            "wanter_id": ObjectId(current_user_id),
+            "status": "Pending Redemption"
+        })
+        
+        active_ticket_ids = [str(claim['_id']) for claim in active_claims]
+        return jsonify({"active_ticket_ids": active_ticket_ids}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Failed to fetch active tickets: {str(e)}")
+        return jsonify({'error': 'Server error'}), 500
 
 @app.route('/api/tickets/<ticket_batch_id>/request', methods=['POST'])
 @token_required
@@ -617,9 +637,13 @@ def request_ticket(current_user_id, ticket_batch_id):
     # We use RS256 so the offline Haver can verify it using only the Public Key
     expiration_time = datetime.datetime.utcnow() + datetime.timedelta(days=30) # 30 day expiration
     
+    item = mongo.db.items.find_one({"_id": ticket_batch['item_id']})
+    item_name = item['name'] if item else "Unknown Item"
+    
     ticket_payload = {
         "ticket_id": claimed_ticket_id,       # Unique ID for local device blacklisting
         "item_id": str(ticket_batch['item_id']),
+        "item_name": item_name,
         "wanter_id": current_user_id,
         "exp": expiration_time                # Prevents forever-valid tickets
     }
@@ -641,10 +665,10 @@ def post_redemption_sync(current_user_id):
     Expects JSON: { "transactions": [{ "qr_payload": "...", "scanned_at": "..." }] }
     """
     # 1. Authorization: Only vendors can sync
-    vendor = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)})
-    if not vendor:
-        return jsonify({"error": "Unauthorized: Only distributors can perform post-hoc sync"}), 403
-
+    user = mongo.db.vendors.find_one({"_id": ObjectId(current_user_id)}) or mongo.db.wanters.find_one({"_id": ObjectId(current_user_id)})
+    if not user:
+        return jsonify({"error": "Unauthorized: User not found"}), 403
+    
     data = request.get_json()
     transactions = data.get('transactions', [])
 

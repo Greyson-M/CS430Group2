@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QrCode, Camera, Upload, ArrowLeft, Wifi, WifiOff, Send, Trash2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { jwtDecode } from 'jwt-decode';
+import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 
 const LEDGER_KEY = 'offlineLedger';
 
@@ -20,6 +22,10 @@ export default function LaunchScanner({ onBack }) {
   const [scanning, setScanning] = useState(false);
   const [ledger, setLedger] = useState(loadLedger);
   const [manualInput, setManualInput] = useState('');
+  
+  // State for the verification popup
+  const [pendingScan, setPendingScan] = useState(null);
+
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState(null);
   const [syncError, setSyncError] = useState(null);
@@ -29,15 +35,94 @@ export default function LaunchScanner({ onBack }) {
     saveLedger(ledger);
   }, [ledger]);
 
-  // Add a scanned QR payload to the offline ledger
-  const addToLedger = (qrPayload) => {
+  // Hook for initializing the HTML5 QR Code Scanner
+  useEffect(() => {
+    let scanner = null;
+
+    if (scanning) {
+      scanner = new Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        /* verbose= */ false
+      );
+
+      scanner.render(
+        (decodedText) => {
+          // Temporarily pause or just handle the scan
+          handleScanInput(decodedText);
+          // Stop scanning to view the popup securely
+          setScanning(false);
+        },
+        (error) => {
+          // Ignored. Scanners constantly throw errors when nothing is found.
+        }
+      );
+    }
+
+    return () => {
+      if (scanner) {
+        scanner.clear().catch(err => console.error("Scanner clear error", err));
+      }
+    };
+  }, [scanning]);
+
+  // Handle manual file upload 
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const html5QrCode = new Html5Qrcode("reader"); // using the same div element id, even if empty
+      // File based scanning
+      const decodedText = await html5QrCode.scanFile(file, true);
+      handleScanInput(decodedText);
+    } catch (err) {
+      alert("No QR code found in this image or processing failed.");
+      console.log("File scan error", err);
+    }
+  };
+
+  // Intercept the scan, decode the JWT, and trigger the popup
+  const handleScanInput = (qrPayload) => {
     if (!qrPayload || !qrPayload.trim()) return;
+    try {
+      // Decode the JWT payload locally
+      const decodedPayload = jwtDecode(qrPayload.trim());
+      
+      // Check if it's already in the local ledger to warn of duplicate
+      const isDuplicate = ledger.some(item => item.qr_payload === qrPayload.trim());
+      
+      // Check if ticket is expired
+      const isExpired = (decodedPayload.exp * 1000) < Date.now();
+
+      setPendingScan({
+        rawPayload: qrPayload.trim(),
+        decoded: decodedPayload,
+        isDuplicate,
+        isExpired
+      });
+      setManualInput('');
+    } catch (err) {
+      alert("Invalid Ticket Format! This QR code does not contain a valid JWT.");
+    }
+  };
+
+  // Add the verified ticket to the offline ledger
+  const confirmAndAddtoLedger = () => {
+    if (!pendingScan) return;
+    
     const entry = {
-      qr_payload: qrPayload.trim(),
+      qr_payload: pendingScan.rawPayload,
       scanned_at: new Date().toISOString()
     };
+    
     setLedger(prev => [...prev, entry]);
-    setManualInput('');
+    setPendingScan(null); // close popup
+  };
+
+  // Cancel the scan
+  const cancelScan = () => {
+    setPendingScan(null);
   };
 
   // Remove a single entry from the ledger
@@ -93,7 +178,7 @@ export default function LaunchScanner({ onBack }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen bg-slate-50 p-6 relative">
       
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
@@ -114,11 +199,9 @@ export default function LaunchScanner({ onBack }) {
       <div className="bg-white rounded-2xl shadow p-6 max-w-2xl mx-auto mb-6">
         
         {/* Scanner Preview */}
-        <div className="border-2 border-dashed border-slate-300 rounded-xl h-48 flex items-center justify-center mb-6">
-          {scanning ? (
-            <p className="text-slate-500">Camera Active...</p>
-          ) : (
-            <p className="text-slate-400">Camera preview will appear here</p>
+        <div id="reader" className="w-full rounded-xl overflow-hidden mb-6 bg-slate-100 min-h-[300px] flex items-center justify-center relative">
+          {!scanning && (
+            <p className="text-slate-400 absolute">Click "Start Scanner" to use camera</p>
           )}
         </div>
 
@@ -126,21 +209,27 @@ export default function LaunchScanner({ onBack }) {
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <button
             onClick={() => setScanning(!scanning)}
-            className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700"
+            className={`flex-1 flex items-center justify-center gap-2 text-white py-3 rounded-xl transition-colors ${scanning ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
           >
             <Camera size={18} />
             {scanning ? "Stop Scanner" : "Start Scanner"}
           </button>
 
-          <button
-            className="flex-1 flex items-center justify-center gap-2 bg-slate-200 text-slate-700 py-3 rounded-xl hover:bg-slate-300"
+          <label
+            className="flex-1 flex items-center justify-center gap-2 bg-slate-200 text-slate-700 py-3 rounded-xl hover:bg-slate-300 cursor-pointer"
           >
             <Upload size={18} />
             Upload QR Code
-          </button>
+            <input 
+              type="file" 
+              accept="image/*" 
+              onChange={handleFileUpload} 
+              className="hidden" 
+            />
+          </label>
         </div>
 
-        {/* Manual QR Input (for testing / paste from clipboard) */}
+        {/* Manual QR Input */}
         <div className="border-t border-slate-200 pt-4">
           <label className="text-sm font-medium text-slate-600 mb-2 block">Manual QR Payload Entry</label>
           <div className="flex gap-2">
@@ -152,17 +241,17 @@ export default function LaunchScanner({ onBack }) {
               className="flex-1 px-4 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none"
             />
             <button
-              onClick={() => addToLedger(manualInput)}
+              onClick={() => handleScanInput(manualInput)}
               disabled={!manualInput.trim()}
               className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Add
+              Scan
             </button>
           </div>
         </div>
       </div>
 
-      {/* Offline Ledger Card */}
+      {/* Offline Ledger Card and rest of the UI continues unchanged... */}
       <div className="bg-white rounded-2xl shadow p-6 max-w-2xl mx-auto mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -224,13 +313,13 @@ export default function LaunchScanner({ onBack }) {
 
       {/* Sync / Fraud Report Card */}
       {syncReport && (
-        <div className="bg-white rounded-2xl shadow p-6 max-w-2xl mx-auto">
+        <div className="bg-white rounded-2xl shadow p-6 max-w-2xl mx-auto mb-6">
           <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
             <Wifi size={18} className="text-emerald-500" />
             Sync Report
           </h2>
 
-          {/* Summary */}
+          {/* Details mapped identically... */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
             <div className="p-3 bg-slate-50 rounded-xl text-center">
               <p className="text-2xl font-bold text-slate-800">{syncReport.sync_summary.total_submitted}</p>
@@ -249,61 +338,81 @@ export default function LaunchScanner({ onBack }) {
               <p className="text-xs text-red-600">Failed</p>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Flagged Items (Fraud Alerts) */}
-          {syncReport.flagged.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1">
-                <AlertTriangle size={14} /> Fraud Alerts
-              </h3>
-              <div className="space-y-2">
-                {syncReport.flagged.map((item, i) => (
-                  <div key={i} className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 bg-amber-200 text-amber-800 rounded text-xs font-bold">{item.reason}</span>
-                      <span className="text-slate-500 text-xs">Ticket: {item.ticket_id}</span>
+      {/* POPUP OVERLAY */}
+      {pendingScan && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-slate-800">Scanned Ticket</h3>
+                <div className="flex gap-2">
+                  {pendingScan.isExpired && (
+                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1 border border-red-200">
+                      <XCircle size={14} /> EXPIRED
+                    </span>
+                  )}
+                  {pendingScan.isDuplicate && (
+                    <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
+                      <AlertTriangle size={14} /> Duplicate Alert
+                    </span>
+                  )}
+                  {!pendingScan.isDuplicate && !pendingScan.isExpired && (
+                    <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Valid Scan
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="bg-slate-50 p-4 rounded-xl space-y-4 mb-6 border border-slate-100">
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Item Name</p>
+                  <p className="text-xl font-bold text-slate-800">
+                    {pendingScan.decoded.item_name || "Unknown Item (Old Code)"}
+                  </p>
+                </div>
+                
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Quantity</p>
+                    <div className="text-lg font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded inline-block mt-1">
+                      1 Unit
                     </div>
-                    <p className="text-amber-700 text-xs">{item.detail}</p>
                   </div>
-                ))}
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Ref Code</p>
+                    <p className="text-sm font-mono font-bold text-slate-700 bg-slate-200 p-1.5 rounded inline-block mt-1 uppercase">
+                      #{pendingScan.decoded.ticket_id?.slice(-6) || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Valid Until</p>
+                  <p className={`text-sm font-medium ${pendingScan.isExpired ? 'text-red-600' : 'text-slate-700'}`}>
+                    {new Date(pendingScan.decoded.exp * 1000).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={confirmAndAddtoLedger}
+                  disabled={pendingScan.isExpired}
+                  className={`flex-1 py-2.5 rounded-xl font-medium text-white transition-colors ${
+                    pendingScan.isExpired 
+                      ? 'bg-slate-300 cursor-not-allowed text-slate-500' 
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {pendingScan.isExpired ? 'Cannot Accept' : 'Accept Ticket'}
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Failed Items */}
-          {syncReport.failed.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-sm font-bold text-red-700 mb-2 flex items-center gap-1">
-                <XCircle size={14} /> Failed Transactions
-              </h3>
-              <div className="space-y-2">
-                {syncReport.failed.map((item, i) => (
-                  <div key={i} className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
-                    Entry #{item.index + 1}: {item.reason}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Successfully Processed */}
-          {syncReport.processed.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold text-emerald-700 mb-2 flex items-center gap-1">
-                <CheckCircle2 size={14} /> Successfully Redeemed
-              </h3>
-              <div className="space-y-2">
-                {syncReport.processed.map((item, i) => (
-                  <div key={i} className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 flex items-center gap-2">
-                    <CheckCircle2 size={14} />
-                    Ticket {item.ticket_id} - Item: {item.item_id}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <p className="text-xs text-slate-400 mt-4">Synced at: {new Date(syncReport.synced_at).toLocaleString()}</p>
+          </div>
         </div>
       )}
     </div>

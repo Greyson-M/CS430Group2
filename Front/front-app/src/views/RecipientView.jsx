@@ -6,7 +6,8 @@ import {
   ArrowRightLeft,
   QrCode,
   Package,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -20,22 +21,15 @@ export default function RecipientView({ receipts }) {
   const [activeTab, setActiveTab] = useState('browse');
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // State to hold fetched ticket batches combined with item info
   const [availableBatches, setAvailableBatches] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // State for requested/saved tickets stored in local storage
   const [savedTickets, setSavedTickets] = useState([]);
 
-  // -----------------------
   // TEMPORARY TEST DATA
-  // -----------------------
-  const reliefCenters = [
-    { name: 'Mountainlair', lat: 39.6358, lng: -79.9547, address: '1550 University Ave, Morgantown, WV 26506' }
-  ];
+  const reliefCenters = [{ name: 'Mountainlair', lat: 39.6358, lng: -79.9547, address: '1550 University Ave, Morgantown, WV 26506' }];
   const testTickets = [];
 
-  // Initialize saved tickets from local storage on load
   useEffect(() => {
     const storedTickets = localStorage.getItem('recipientTickets');
     if (storedTickets) {
@@ -47,30 +41,63 @@ export default function RecipientView({ receipts }) {
     }
   }, []);
 
-  // Fetch ticket batches and items from backend
+  // Sync tickets with backend
+  const syncActiveTickets = async () => {
+    const token = localStorage.getItem('authToken');
+    const localTickets = JSON.parse(localStorage.getItem('recipientTickets')) || [];
+    
+    if (!token || localTickets.length === 0) return;
+
+    try {
+      // Prong 2: Ask backend for all tickets that are still "Pending Redemption"
+      const res = await fetch('http://localhost:5000/api/tickets/mine', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const activeIds = data.active_ticket_ids || [];
+        
+        // Filter out any locally saved ticket whose ID is NO LONGER in the backend's active list
+        const filteredTickets = localTickets.filter(ticket => activeIds.includes(ticket.id));
+        
+        if (filteredTickets.length !== localTickets.length) {
+          setSavedTickets(filteredTickets);
+          localStorage.setItem('recipientTickets', JSON.stringify(filteredTickets));
+          console.log("Auto-synced: Removed redeemed tickets from local wallet.");
+        }
+      }
+    } catch (err) {
+      console.error("Could not sync active tickets. Working offline.");
+    }
+  };
+
+  // Re-run fetch when user hits "Explore Resources" or "My Tickets"
+  useEffect(() => {
+    if (activeTab === 'browse') {
+      fetchBatches();
+    } else if (activeTab === 'my-tickets') {
+      syncActiveTickets();
+    }
+  }, [activeTab]);
+
   const fetchBatches = async () => {
     setLoading(true);
     try {
-      // 1. Fetch available ticket batches
       const batchesRes = await fetch('http://localhost:5000/api/tickets');
       const batchesData = await batchesRes.json();
 
-      // 2. Fetch items to gather item names
       const itemsRes = await fetch('http://localhost:5000/api/items');
       const itemsData = await itemsRes.json();
 
-      // Map item data for easy lookup by item ID
       const itemMap = {};
       if (Array.isArray(itemsData)) {
-        itemsData.forEach(item => {
-          itemMap[item._id] = item;
-        });
+        itemsData.forEach(item => { itemMap[item._id] = item; });
       }
 
-      // 3. Assemble display data directly mapping against ticket batches
       if (Array.isArray(batchesData)) {
         const mapped = batchesData
-          .filter(b => b.available_qty > 0) // Hide empty batches
+          .filter(b => b.available_qty > 0)
           .map(batch => {
             const item = itemMap[batch.item_id] || {};
             return {
@@ -91,14 +118,6 @@ export default function RecipientView({ receipts }) {
     }
   };
 
-  // Re-run fetch when user hits "Explore Resources" tab
-  useEffect(() => {
-    if (activeTab === 'browse') {
-      fetchBatches();
-    }
-  }, [activeTab]);
-
-  // Request a ticket from a specific batch ID
   const handleRequestTicket = async (batchId, resourceName) => {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -109,25 +128,21 @@ export default function RecipientView({ receipts }) {
     try {
       const res = await fetch(`http://localhost:5000/api/tickets/${batchId}/request`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
 
       if (res.ok) {
-        // Backend typo mapping for item name if returning "item_name: "
         const backendItemName = data['item_name: '] || data.item_name || resourceName; 
 
         const newTicket = {
-          id: data.ticket_id || Date.now().toString(), // Use backend ticket ID if available
+          id: data.ticket_id || Date.now().toString(),
           resourceId: batchId,
           resourceName: backendItemName || 'Unknown Resource', 
           quantity: 1, 
           status: 'Valid', 
-          // Default expiry +30 days if not returned explicitly
           expiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(), 
-          code: data.qr_payload // The JWT to present as a QR code
+          code: data.qr_payload
         };
 
         const updatedTickets = [...savedTickets, newTicket];
@@ -135,13 +150,23 @@ export default function RecipientView({ receipts }) {
         localStorage.setItem('recipientTickets', JSON.stringify(updatedTickets));
 
         alert('Ticket successfully requested!');
-        fetchBatches(); // Refresh resources interface to reflect decremented qty
+        fetchBatches();
       } else {
         alert('Failed to request ticket: ' + (data.error || 'Unknown error'));
       }
     } catch (err) {
       console.error('Network error during request: ', err);
       alert('Network error occurred. Ensure backend is running.');
+    }
+  };
+
+  // Prong 1 (Offline Mode): Manual Deletion
+  const handleRemoveTicket = (ticketId) => {
+    if (window.confirm("Are you sure you want to remove this ticket from your wallet? Only do this if you have already redeemed it or you no longer need the item.")) {
+      const updatedTickets = savedTickets.filter(t => t.id !== ticketId);
+      setSavedTickets(updatedTickets);
+      localStorage.setItem('recipientTickets', JSON.stringify(updatedTickets));
+      if (selectedTicket?.id === ticketId) setSelectedTicket(null);
     }
   };
 
@@ -168,7 +193,7 @@ export default function RecipientView({ receipts }) {
       </div>
 
       {activeTab === 'map' && (
-        <MapView reliefCenters={reliefCenters} tickets={testTickets} /> /////////////test data
+        <MapView reliefCenters={reliefCenters} tickets={testTickets} />
       )}
 
       {activeTab === 'browse' && (
@@ -205,33 +230,84 @@ export default function RecipientView({ receipts }) {
       )}
 
       {activeTab === 'my-tickets' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
           {savedTickets.length > 0 ? savedTickets.map(ticket => (
-            <Card key={ticket.id} className="border-l-4 border-l-emerald-600">
-              <div className="p-5 flex justify-between items-center">
+            <Card key={ticket.id} className="border-l-4 border-l-emerald-600 cursor-pointer hover:shadow-lg transition-shadow">
+              <div 
+                className="p-5 flex justify-between items-center" 
+                onClick={() => setSelectedTicket(ticket)}
+              >
                 <div className="space-y-1">
                   <h3 className="font-bold text-slate-800">{ticket.resourceName}</h3>
                   <p className="text-sm text-slate-500">Qty: {ticket.quantity} • Valid until: {ticket.expiry}</p>
-                  <div className="flex gap-2 mt-2">
-                    <button className="text-xs flex items-center gap-1 text-slate-500 hover:text-emerald-600">
-                      <ArrowRightLeft size={14} /> Transfer Ticket
-                    </button>
-                  </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedTicket(ticket)}
-                  className="p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
-                >
+                <button className="p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
                   <QrCode size={32} className="text-slate-800" />
+                </button>
+              </div>
+              <div className="bg-slate-50 py-3 px-5 border-t border-slate-100 flex justify-end">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleRemoveTicket(ticket.id) }}
+                  className="text-xs font-semibold flex items-center gap-1.5 text-slate-500 hover:text-red-600 transition-colors"
+                >
+                  <Trash2 size={14} /> Remove Ticket
                 </button>
               </div>
             </Card>
           )) : (
-            <p className="text-slate-500 text-sm">You haven't requested any tickets yet.</p>
+            <p className="text-slate-500 text-sm">You haven't requested any tickets yet or they have all been redeemed.</p>
+          )}
+
+          {/* Ticket QR Overlay */}
+          {selectedTicket && (
+            <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative animate-in zoom-in-95 duration-200">
+                <button 
+                  onClick={() => setSelectedTicket(null)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+                <div className="text-center">
+                  <h3 className="text-xl font-bold text-slate-800 mb-1">{selectedTicket.resourceName}</h3>
+                  <p className="text-sm text-slate-500 mb-6">Quantity: {selectedTicket.quantity} Unit</p>
+                  
+                  <div className="bg-white p-4 rounded-xl border-2 border-slate-100 inline-block mb-6">
+                    <QRCodeSVG 
+                      value={selectedTicket.code} 
+                      size={200}
+                      level="H"
+                    />
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 rounded-xl mb-4 text-left">
+                    <p className="text-xs text-slate-500 mb-1">Ticket Reference:</p>
+                    <p className="font-mono text-sm break-all font-bold text-slate-700">
+                      #{selectedTicket.id?.slice(-8).toUpperCase() || "N/A"}
+                    </p>
+                  </div>
+                  
+                  <div className="bg-slate-50 p-4 rounded-xl mb-4 text-left">
+                    <p className="text-xs text-slate-500 mb-1">Raw Ticket JWT (Token):</p>
+                    <div className="font-mono text-xs break-all text-slate-700 max-h-24 overflow-y-auto w-full p-2 bg-white rounded border border-slate-200 select-all">
+                      {selectedTicket.code}
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={() => handleRemoveTicket(selectedTicket.id)}
+                    className="w-full py-2.5 mt-2 bg-red-50 text-red-600 rounded-xl font-medium hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 size={16} /> Mark as Redeemed
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
 
+      {/* History and Receipts code left the same */}
       {activeTab === 'history' && (
         <Card>
           <div className="overflow-x-auto">
@@ -262,33 +338,6 @@ export default function RecipientView({ receipts }) {
           </div>
         </Card>
       )}
-
-      {selectedTicket && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <Card className="max-w-xs w-full p-8 text-center animate-in zoom-in-95 duration-200">
-            <h2 className="text-xl font-bold mb-2">{selectedTicket.resourceName}</h2>
-            <p className="text-slate-500 text-sm mb-6">Present for distributor verification</p>
-            <div className="bg-slate-100 p-4 rounded-2xl mb-6 aspect-square flex items-center justify-center overflow-hidden">
-               {/* Render the actual QR Code here */}
-               <QRCodeSVG 
-                 value={selectedTicket.code || "invalid"} 
-                 size={180} 
-                 level="H" 
-                 includeMargin={true}
-               />
-            </div>
-            <div className="font-mono text-[10px] break-all tracking-widest bg-slate-50 p-2 rounded mb-6 text-slate-700 max-h-24 overflow-y-auto">
-              {selectedTicket.code}
-            </div>
-            <button 
-              onClick={() => setSelectedTicket(null)}
-              className="w-full py-3 bg-emerald-600 text-white rounded-xl font-medium"
-            >
-              Done
-            </button>
-          </Card>
-        </div>
-      )}
     </div>
   );
-};
+}

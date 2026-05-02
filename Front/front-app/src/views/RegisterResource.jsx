@@ -10,6 +10,8 @@ export default function RegisterResource({ setActivePage, addResource }) {
     unit: "",
     status: "Public",
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     setFormData({
@@ -18,27 +20,82 @@ export default function RegisterResource({ setActivePage, addResource }) {
     });
   };
 
-  // TODO (backend): This form will eventually submit to POST /api/resources
-  // Currently updates frontend state only
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    const newResource = {
-      id: Date.now(), // temp ID
-      name: formData.name,
-      total: Number(formData.quantity),
-      remaining: Number(formData.quantity),
-      status: formData.status,
-      provider: formData.provider,
-      location: formData.location,
-      unit: formData.unit,
-    };
-  
-  // TODO (backend): Replace addResource with API call
-  // POST /api/resources
-  // Expected response: created resource object with DB-generated ID
-  addResource(newResource); ///////////
-  setActivePage({ page: "home" });
+    const token = localStorage.getItem('authToken');
+    const userId = localStorage.getItem('userId'); 
+
+    if (!token || !userId) {
+      setError("You must be logged in to register resources.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Create the base item in the items collection
+      const itemRes = await fetch('http://localhost:5000/api/items', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          vendor_id: userId,
+          item_name: formData.name,
+          fields: {
+            provider: formData.provider,
+            location: formData.location,
+            unit: formData.unit,
+            status: formData.status
+          }
+        })
+      });
+
+      const itemData = await itemRes.json();
+      if (!itemRes.ok) throw new Error(itemData.error || "Failed to create item.");
+      
+      const createdItemId = itemData.id;
+
+      // 2. Generate the ticket batch for the specified quantity
+      const ticketRes = await fetch('http://localhost:5000/api/tickets', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          item_id: createdItemId,
+          quantity: parseInt(formData.quantity, 10)
+        })
+      });
+
+      const ticketData = await ticketRes.json();
+      if (!ticketRes.ok) throw new Error(ticketData.error || "Failed to generate ticket pool.");
+
+      // 3. Create the resource for the frontend to show without needing an immediate total refresh
+      const newResource = {
+        id: createdItemId, 
+        name: formData.name,
+        total: Number(formData.quantity),
+        remaining: Number(formData.quantity),
+        status: formData.status,
+        provider: formData.provider,
+        location: formData.location,
+        unit: formData.unit,
+      };
+    
+      addResource(newResource); 
+      setActivePage({ page: "home" });
+
+    } catch (err) {
+      console.error("Resource Registration Error: ", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -48,6 +105,7 @@ export default function RegisterResource({ setActivePage, addResource }) {
       <button
         onClick={() => setActivePage({ page: "home" })}
         className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600 mb-4"
+        disabled={loading}
       >
         <ArrowLeft size={16} />
         Back
@@ -57,6 +115,13 @@ export default function RegisterResource({ setActivePage, addResource }) {
       <h2 className="text-2xl font-bold text-slate-800 mb-6">
         Register New Resource
       </h2>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200">
+          {error}
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -117,6 +182,7 @@ export default function RegisterResource({ setActivePage, addResource }) {
             value={formData.quantity}
             onChange={handleChange}
             required
+            min="1"
             className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 outline-none"
           />
         </div>
@@ -154,9 +220,10 @@ export default function RegisterResource({ setActivePage, addResource }) {
         {/* Submit */}
         <button
           type="submit"
-          className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition"
+          disabled={loading}
+          className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition disabled:opacity-50"
         >
-          Register Resource
+          {loading ? "Registering..." : "Register Resource"}
         </button>
       </form>
     </div>
