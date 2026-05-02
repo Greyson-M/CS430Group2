@@ -95,11 +95,16 @@ export default function LaunchScanner({ onBack }) {
       // Check if ticket is expired
       const isExpired = (decodedPayload.exp * 1000) < Date.now();
 
+      // Check if the ticket belongs to the current vendor scanning it
+      const currentUserId = localStorage.getItem('userId');
+      const isWrongVendor = decodedPayload.vendor_id && decodedPayload.vendor_id !== currentUserId;
+
       setPendingScan({
         rawPayload: qrPayload.trim(),
         decoded: decodedPayload,
         isDuplicate,
-        isExpired
+        isExpired,
+        isWrongVendor // <-- Pass this new flag to the UI
       });
       setManualInput('');
     } catch (err) {
@@ -113,11 +118,23 @@ export default function LaunchScanner({ onBack }) {
     
     const entry = {
       qr_payload: pendingScan.rawPayload,
-      scanned_at: new Date().toISOString()
+      scanned_at: new Date().toISOString(),
+      action: 'ACCEPT' 
     };
     
     setLedger(prev => [...prev, entry]);
     setPendingScan(null); // close popup
+  };
+  // Add the denied ticket to the offline ledger
+  const denyAndAddtoLedger = () => {
+    if (!pendingScan) return;
+    const entry = {
+      qr_payload: pendingScan.rawPayload,
+      scanned_at: new Date().toISOString(),
+      action: 'DENY'
+    };
+    setLedger(prev => [...prev, entry]);
+    setPendingScan(null); 
   };
 
   // Cancel the scan
@@ -288,9 +305,14 @@ export default function LaunchScanner({ onBack }) {
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {ledger.map((entry, i) => (
               <div key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl text-sm">
-                <div className="flex-1 min-w-0">
-                  <p className="text-slate-700 font-mono text-xs truncate">{entry.qr_payload}</p>
-                  <p className="text-slate-400 text-xs mt-0.5">Scanned: {new Date(entry.scanned_at).toLocaleString()}</p>
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${entry.action === 'DENY' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    {entry.action === 'DENY' ? 'DENIED' : 'ACCEPTED'}
+                  </span>
+                  <div>
+                    <p className="text-slate-700 font-mono text-xs truncate">{entry.qr_payload}</p>
+                    <p className="text-slate-400 text-[10px] mt-0.5">Scanned: {new Date(entry.scanned_at).toLocaleString()}</p>
+                  </div>
                 </div>
                 <button
                   onClick={() => removeFromLedger(i)}
@@ -401,16 +423,54 @@ export default function LaunchScanner({ onBack }) {
               <div className="flex gap-3">
                 <button 
                   onClick={confirmAndAddtoLedger}
-                  disabled={pendingScan.isExpired}
+                  disabled={pendingScan.isExpired || pendingScan.isWrongVendor}
                   className={`flex-1 py-2.5 rounded-xl font-medium text-white transition-colors ${
-                    pendingScan.isExpired 
-                      ? 'bg-slate-300 cursor-not-allowed text-slate-500' 
+                    pendingScan.isExpired || pendingScan.isWrongVendor
+                      ? 'bg-slate-300 cursor-not-allowed text-slate-500'
                       : 'bg-emerald-600 hover:bg-emerald-700'
                   }`}
                 >
-                  {pendingScan.isExpired ? 'Cannot Accept' : 'Accept Ticket'}
+                  {pendingScan.isExpired || pendingScan.isWrongVendor ? 'Cannot Accept' : 'Accept Ticket'}
                 </button>
               </div>
+
+              <div className="flex gap-3 mt-1">
+                <button 
+                  onClick={cancelScan}
+                  className="flex-none px-4 py-2.5 rounded-xl font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={denyAndAddtoLedger}
+                  className="flex-1 py-2.5 rounded-xl font-medium text-white transition-colors bg-red-600 hover:bg-red-700"
+                >
+                  Deny Ticket
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                  {pendingScan.isExpired && (
+                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1 border border-red-200">
+                      <XCircle size={14} /> EXPIRED
+                    </span>
+                  )}
+                  {pendingScan.isWrongVendor && (
+                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1 border border-red-200">
+                      <XCircle size={14} /> WRONG VENDOR
+                    </span>
+                  )}
+                  {pendingScan.isDuplicate && (
+                    <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center gap-1">
+                      <AlertTriangle size={14} /> Duplicate Alert
+                    </span>
+                  )}
+                  {!pendingScan.isDuplicate && !pendingScan.isExpired && !pendingScan.isWrongVendor && (
+                    <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Valid Scan
+                    </span>
+                  )}
+                </div>
             </div>
           </div>
         </div>

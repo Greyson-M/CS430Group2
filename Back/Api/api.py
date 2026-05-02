@@ -233,7 +233,7 @@ def create_item(current_user_id):
         return jsonify({"error": "Item name is required"}), 400
         
     # Insert into the 'items' collection
-    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "vendor_id": vendor_id, "fields": fields}
+    new_item = {"vendor_id": ObjectId(vendor_id), "name": name, "fields": fields}
     result = mongo.db.items.insert_one(new_item)
     
     return jsonify({
@@ -506,7 +506,10 @@ def generate_ticket(current_user_id):
         return jsonify({"error": "Valid item_id and positive quantity are required"}), 400
 
     # Verify the item exists and belongs to this vendor
-    item = mongo.db.items.find_one({"_id": ObjectId(item_id), "vendor_id": current_user_id})
+    item = mongo.db.items.find_one({
+        "_id": ObjectId(item_id),
+        "vendor_id": ObjectId(current_user_id)
+    })
     if not item:
         print (f"Item with ID {item_id} not found for vendor {current_user_id}")
         return jsonify({"error": "Item not found or does not belong to you"}), 404
@@ -645,6 +648,7 @@ def request_ticket(current_user_id, ticket_batch_id):
         "item_id": str(ticket_batch['item_id']),
         "item_name": item_name,
         "wanter_id": current_user_id,
+        "vendor_id": str(ticket_batch['vendor_id']),
         "exp": expiration_time                # Prevents forever-valid tickets
     }
 
@@ -708,6 +712,8 @@ def post_redemption_sync(current_user_id):
             mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "raw_payload": qr_payload[:100], "scanned_at": scanned_at, "status": "REJECTED", "reason": "INVALID_SIGNATURE", "synced_at": datetime.datetime.utcnow()})
             continue
 
+        action = txn.get('action', 'REDEEM')  # Default action is REDEEM if not specified
+
         ticket_id = ticket_data.get('ticket_id')
         item_id = ticket_data.get('item_id')
         wanter_id = ticket_data.get('wanter_id')
@@ -740,6 +746,33 @@ def post_redemption_sync(current_user_id):
         if current_status == 'Redeemed':
             flagged.append({"index": idx, "ticket_id": ticket_id, "reason": "ALREADY_REDEEMED", "detail": "Ticket was already marked as redeemed", "original_redeemed_at": str(claimed_ticket.get('redeemed_at', 'unknown'))})
             mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "FLAGGED", "reason": "ALREADY_REDEEMED", "synced_at": datetime.datetime.utcnow()})
+            continue
+
+                # 5.5 If the vendor deliberately denied this ticket
+        if action == 'DENY':
+            # Update the ticket status to denied instead of redeemed
+            mongo.db.claimed_tickets.update_one(
+                {"_id": ObjectId(ticket_id)}, 
+                {"$set": {
+                    "status": "Denied", 
+                    "denied_at": datetime.datetime.utcnow(), 
+                    "denied_by_vendor": ObjectId(current_user_id), 
+                    "scanned_at": scanned_at
+                }}
+            )
+            # Log the intentional denial
+            mongo.db.sync_logs.insert_one({
+                "vendor_id": ObjectId(current_user_id), 
+                "ticket_id": ticket_id, 
+                "item_id": item_id, 
+                "wanter_id": wanter_id, 
+                "scanned_at": scanned_at, 
+                "status": "DENIED", 
+                "synced_at": datetime.datetime.utcnow()
+            })
+            
+            # Place in flagged report so the vendor knows it processed the denial
+            flagged.append({"index": idx, "ticket_id": ticket_id, "reason": "VENDOR_DENIED", "detail": "Ticket was explicitly denied by the scanning vendor."})
             continue
 
         # 6. Mark as Redeemed
