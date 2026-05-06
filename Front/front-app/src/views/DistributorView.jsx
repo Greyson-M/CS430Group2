@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Ticket as TicketIcon, Pencil, Trash2, Eye, EyeOff, Maximize2 } from 'lucide-react';
+import { Plus, Ticket as TicketIcon, Trash2, Eye, EyeOff, Maximize2 } from 'lucide-react';
 import Card from '../components/Card';
 
 export default function DistributorView({ setActivePage }) {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   // Fetch the items and ticket batches for the logged-in vendor
   useEffect(() => {
@@ -20,12 +21,12 @@ export default function DistributorView({ setActivePage }) {
       try {
         setLoading(true);
         // 1. Fetch items owned by this vendor
-        const itemsRes = await fetch(`http://localhost:5000/api/items?vendor_id=${vendorId}`);
+        const itemsRes = await fetch(`/api/items?vendor_id=${vendorId}`);
         if (!itemsRes.ok) throw new Error("Failed to fetch items");
         const items = await itemsRes.json();
 
         // 2. Fetch ticket batches owned by this vendor
-        const ticketsRes = await fetch(`http://localhost:5000/api/tickets?vendor_id=${vendorId}`);
+        const ticketsRes = await fetch(`/api/tickets?vendor_id=${vendorId}`);
         if (!ticketsRes.ok) throw new Error("Failed to fetch tickets");
         const tickets = await ticketsRes.json();
 
@@ -57,6 +58,42 @@ export default function DistributorView({ setActivePage }) {
 
     fetchVendorData();
   }, []);
+
+  const handleDeleteResource = async (resourceId, resourceName) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      setError('Not authenticated. Please log in again.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete "${resourceName}"?`);
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(resourceId);
+      setError(null);
+
+      const res = await fetch(`/api/items/${resourceId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete resource.');
+      }
+
+      setResources(prev => prev.filter(resource => resource.id !== resourceId));
+    } catch (err) {
+      console.error('Delete resource error:', err);
+      setError(err.message || 'Could not delete resource.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -115,12 +152,12 @@ export default function DistributorView({ setActivePage }) {
                     <TicketIcon size={20} />
                   </button>
 
-                  {/* Future Hookups for Edit and Delete */}
-                  <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors bg-slate-50 rounded-lg hover:bg-blue-50" title="Edit Resource">
-                    <Pencil size={20} />
-                  </button>
-
-                  <button className="p-2 text-slate-400 hover:text-rose-600 transition-colors bg-slate-50 rounded-lg hover:bg-rose-50" title="Delete Resource">
+                  <button
+                    onClick={() => handleDeleteResource(res.id, res.name)}
+                    disabled={deletingId === res.id}
+                    className="p-2 text-slate-400 hover:text-rose-600 transition-colors bg-slate-50 rounded-lg hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Delete Resource"
+                  >
                     <Trash2 size={20} />
                   </button>
                 </div>

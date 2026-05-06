@@ -137,7 +137,7 @@ export default function App() {
     const checkStatus = async () => {
       // Check API connectivity
       try {
-        const res = await fetch('http://localhost:5000/api/time');
+        const res = await fetch('/api/time');
         if (res.ok) {
           setApiStatus('online');
         } else {
@@ -155,7 +155,7 @@ export default function App() {
       }
 
       try {
-        const res = await fetch('http://localhost:5000/api/validate-token', {
+        const res = await fetch('/api/validate-token', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,

@@ -35,6 +35,22 @@ def ensure_default_database(uri, default_db_name="app"):
     normalized_query = urlencode(query_pairs)
     return urlunsplit((parsed.scheme, parsed.netloc, normalized_path, normalized_query, parsed.fragment))
 
+
+def build_ticket_payload(ticket_id, item_id, item_name, wanter_id, vendor_id, expiration_time):
+    return {
+        "tid": ticket_id,
+        "iid": item_id,
+        "nam": item_name,
+        "wid": wanter_id,
+        "vid": vendor_id,
+        "exp": expiration_time
+    }
+
+
+def get_ticket_claim(ticket_data, compact_key, legacy_key):
+    return ticket_data.get(compact_key, ticket_data.get(legacy_key))
+
+
 app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = 'big_secret_herebig_secret_herebig_secret_herebig_secret_here'  # In production, use a more secure secret key and store it safely (e.g., in environment variables)
@@ -342,7 +358,7 @@ def update_item(current_user_id, item_id):
 @token_required
 def delete_item(current_user_id, item_id):
     '''
-    Delete an item from the database.
+    Delete an item and all related ticket data.
     Requires Authorization header.
     '''
     try:
@@ -350,20 +366,34 @@ def delete_item(current_user_id, item_id):
             item_obj_id = ObjectId(item_id)
         except Exception:
             return jsonify({"error": "Invalid item_id format"}), 400
-        
-        # 1. Fetch the item to check ownership
+
         item = mongo.db.items.find_one({"_id": item_obj_id})
         if not item:
             return jsonify({"error": "Item not found"}), 404
 
-        # 2. AUTHORIZATION CHECK
         if str(item.get('vendor_id')) != current_user_id:
             return jsonify({"error": "Unauthorized: You do not own this item"}), 403
-        
-        result = mongo.db.items.delete_one({"_id": item_obj_id})
-        
-        return jsonify({"message": "Item deleted successfully"}), 200
-    
+
+        claimed_delete_result = mongo.db.claimed_tickets.delete_many({
+            "item_id": item_obj_id
+        })
+
+        ticket_delete_result = mongo.db.tickets.delete_many({
+            "item_id": item_obj_id
+        })
+
+        item_delete_result = mongo.db.items.delete_one({
+            "_id": item_obj_id
+        })
+
+        return jsonify({
+            "message": "Item and related ticket data deleted successfully",
+            "deleted_item_id": item_id,
+            "deleted_items": item_delete_result.deleted_count,
+            "deleted_ticket_batches": ticket_delete_result.deleted_count,
+            "deleted_claimed_tickets": claimed_delete_result.deleted_count
+        }), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
@@ -666,14 +696,14 @@ def request_ticket(current_user_id, ticket_batch_id):
     item = mongo.db.items.find_one({"_id": ticket_batch['item_id']})
     item_name = item['name'] if item else "Unknown Item"
     
-    ticket_payload = {
-        "ticket_id": claimed_ticket_id,       # Unique ID for local device blacklisting
-        "item_id": str(ticket_batch['item_id']),
-        "item_name": item_name,
-        "wanter_id": current_user_id,
-        "vendor_id": str(ticket_batch['vendor_id']),
-        "exp": expiration_time                # Prevents forever-valid tickets
-    }
+    ticket_payload = build_ticket_payload(
+        claimed_ticket_id,
+        str(ticket_batch['item_id']),
+        item_name,
+        current_user_id,
+        str(ticket_batch['vendor_id']),
+        expiration_time
+    )
 
     signed_ticket = jwt.encode(ticket_payload, PRIVATE_KEY, algorithm="RS256")
 
@@ -681,7 +711,7 @@ def request_ticket(current_user_id, ticket_batch_id):
         "message": "Ticket claimed successfully",
         "qr_payload": signed_ticket,
         "ticket_id": claimed_ticket_id,
-        "item_name: ": mongo.db.items.find_one({"_id": ticket_batch['item_id']})['name']
+        "item_name": item_name
     }), 200
 
 @app.route('/api/tickets/sync', methods=['POST'])
@@ -737,9 +767,9 @@ def post_redemption_sync(current_user_id):
 
         action = txn.get('action', 'REDEEM')  # Default action is REDEEM if not specified
 
-        ticket_id = ticket_data.get('ticket_id')
-        item_id = ticket_data.get('item_id')
-        wanter_id = ticket_data.get('wanter_id')
+        ticket_id = get_ticket_claim(ticket_data, 'tid', 'ticket_id')
+        item_id = get_ticket_claim(ticket_data, 'iid', 'item_id')
+        wanter_id = get_ticket_claim(ticket_data, 'wid', 'wanter_id')
 
         if not ticket_id:
             failed.append({"index": idx, "reason": "Decoded JWT missing ticket_id"})

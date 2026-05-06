@@ -50,7 +50,7 @@ export default function RecipientView({ receipts }) {
 
     try {
       // Prong 2: Ask backend for all tickets that are still "Pending Redemption"
-      const res = await fetch('http://localhost:5000/api/tickets/mine', {
+      const res = await fetch('/api/tickets/mine', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -84,10 +84,10 @@ export default function RecipientView({ receipts }) {
   const fetchBatches = async () => {
     setLoading(true);
     try {
-      const batchesRes = await fetch('http://localhost:5000/api/tickets');
+      const batchesRes = await fetch('/api/tickets');
       const batchesData = await batchesRes.json();
 
-      const itemsRes = await fetch('http://localhost:5000/api/items');
+      const itemsRes = await fetch('/api/items');
       const itemsData = await itemsRes.json();
 
       const itemMap = {};
@@ -126,7 +126,7 @@ export default function RecipientView({ receipts }) {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/tickets/${batchId}/request`, {
+      const res = await fetch(`/api/tickets/${batchId}/request`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -239,7 +239,7 @@ export default function RecipientView({ receipts }) {
               >
                 <div className="space-y-1">
                   <h3 className="font-bold text-slate-800">{ticket.resourceName}</h3>
-                  <p className="text-sm text-slate-500">Qty: {ticket.quantity} • Valid until: {ticket.expiry}</p>
+                  <p className="text-sm text-slate-500">Qty: {ticket.quantity} | Valid until: {ticket.expiry}</p>
                 </div>
                 <button className="p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
                   <QrCode size={32} className="text-slate-800" />
@@ -266,17 +266,19 @@ export default function RecipientView({ receipts }) {
                   onClick={() => setSelectedTicket(null)}
                   className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
                 >
-                  ✕
-                </button>
+                  X</button>
                 <div className="text-center">
                   <h3 className="text-xl font-bold text-slate-800 mb-1">{selectedTicket.resourceName}</h3>
                   <p className="text-sm text-slate-500 mb-6">Quantity: {selectedTicket.quantity} Unit</p>
                   
-                  <div className="bg-white p-4 rounded-xl border-2 border-slate-100 inline-block mb-6">
+                  <div className="bg-white p-4 rounded-xl border-2 border-slate-100 inline-flex justify-center w-full mb-6">
                     <QRCodeSVG 
-                      value={selectedTicket.code} 
-                      size={200}
-                      level="H"
+                      value={selectedTicket.code}
+                      size={320}
+                      level="M"
+                      marginSize={4}
+                      title={`${selectedTicket.resourceName} ticket QR code`}
+                      className="h-auto w-full max-w-[320px]"
                     />
                   </div>
                   

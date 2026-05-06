@@ -36,7 +36,7 @@ export default function RegisterResource({ setActivePage, addResource }) {
 
     try {
       // 1. Create the base item in the items collection
-      const itemRes = await fetch('http://localhost:5000/api/items', {
+      const itemRes = await fetch('/api/items', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -60,7 +60,7 @@ export default function RegisterResource({ setActivePage, addResource }) {
       const createdItemId = itemData.id;
 
       // 2. Generate the ticket batch for the specified quantity
-      const ticketRes = await fetch('http://localhost:5000/api/tickets', {
+      const ticketRes = await fetch('/api/tickets', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
