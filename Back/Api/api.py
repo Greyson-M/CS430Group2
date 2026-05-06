@@ -10,6 +10,7 @@ from functools import wraps
 import datetime
 from flask_cors import CORS
 import secrets
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # Load the private key for signing tickets (Ensure the file path is correct for your environment)
 with open('jwtRS256.key', 'r') as f:
@@ -20,12 +21,26 @@ from test_cases import Tester
 # Load environment variables from the .env file
 load_dotenv()
 
+
+def ensure_default_database(uri, default_db_name="app"):
+    if not uri:
+        return uri
+
+    parsed = urlsplit(uri)
+    if parsed.path and parsed.path != '/':
+        return uri
+
+    query_pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    normalized_path = f'/{default_db_name}'
+    normalized_query = urlencode(query_pairs)
+    return urlunsplit((parsed.scheme, parsed.netloc, normalized_path, normalized_query, parsed.fragment))
+
 app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = 'big_secret_herebig_secret_herebig_secret_herebig_secret_here'  # In production, use a more secure secret key and store it safely (e.g., in environment variables)
 
 # Get the MONGO_URI from the environment and add it to Flask's config
-app.config["MONGO_URI"] = os.getenv("MONGO_URI")
+app.config["MONGO_URI"] = ensure_default_database(os.getenv("MONGO_URI"))
 
 # Initialize the PyMongo extension with your app
 mongo = PyMongo(app)
@@ -607,7 +622,6 @@ def request_ticket(current_user_id, ticket_batch_id):
     if not user:
         return jsonify({"error": "Unauthorized: User not found"}), 403
     
-
     try:
         batch_obj_id = ObjectId(ticket_batch_id)
     except Exception:
@@ -640,6 +654,15 @@ def request_ticket(current_user_id, ticket_batch_id):
     # We use RS256 so the offline Haver can verify it using only the Public Key
     expiration_time = datetime.datetime.utcnow() + datetime.timedelta(days=30) # 30 day expiration
     
+    mongo.db.tickets.update_one(
+    {"_id": batch_obj_id},
+        {
+            "$set": {
+                f"recipient_expirations.{current_user_id}.{claimed_ticket_id}": expiration_time
+            }
+        }
+    )
+
     item = mongo.db.items.find_one({"_id": ticket_batch['item_id']})
     item_name = item['name'] if item else "Unknown Item"
     
@@ -782,6 +805,17 @@ def post_redemption_sync(current_user_id):
         batch_id = claimed_ticket.get('ticket_batch_id')
         if batch_id:
             mongo.db.tickets.update_one({"_id": batch_id}, {"$inc": {"total_qty": -1}})
+
+        batch_wanter_id = str(claimed_ticket.get('wanter_id'))
+        if batch_id and batch_wanter_id:
+            mongo.db.tickets.update_one(
+                {"_id": batch_id},
+                {
+                "$unset": {
+                    f"recipient_expirations.{batch_wanter_id}.{ticket_id}": ""
+                }
+                }
+            )
 
         # 8. Log successful redemption
         mongo.db.sync_logs.insert_one({"vendor_id": ObjectId(current_user_id), "ticket_id": ticket_id, "item_id": item_id, "wanter_id": wanter_id, "scanned_at": scanned_at, "status": "REDEEMED", "synced_at": datetime.datetime.utcnow()})

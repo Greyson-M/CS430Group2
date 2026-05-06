@@ -1,60 +1,70 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock } from 'lucide-react';
 import Card from '../components/Card';
 
-// mock queue data
-const MOCK_QUEUE = [
-  { id: 'u1', name: 'John Doe' },
-  { id: 'u2', name: 'Jane Smith' },
-  { id: 'u3', name: 'Michael Brown' },
-  { id: 'u4', name: 'Emily Davis' },
-  { id: 'u5', name: 'Chris Wilson' },
-  { id: 'u6', name: 'Sarah Johnson' },
-  { id: 'u7', name: 'David Lee' },
-];
+function flattenOutstanding(recipientExpirations = {}) {
+	return Object.entries(recipientExpirations)
+		.flatMap(([recipientId, claims]) =>
+			Object.entries(claims || {}).map(([claimId, expiresAt]) => ({
+				recipientId,
+				claimId,
+				expiresAt,
+			}))
+		)
+		.sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+}
 
 export default function QueueView({ resource, onBack }) {
-  return (
-    <div className="space-y-6">
-      
-      {/* Back Button */}
-      <button 
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-600 hover:text-slate-900"
-      >
-        <ArrowLeft size={18} /> Back to Resources
-      </button>
+	const outstandingTickets = flattenOutstanding(resource.recipientExpirations);
 
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800">
-          {resource.name} Queue
-        </h2>
-        <p className="text-slate-500">
-          {MOCK_QUEUE.length} people waiting
-        </p>
-      </div>
+	return (
+		<div className="space-y-6">
+			<button
+				onClick={onBack}
+				className="flex items-center gap-2 text-slate-600 hover:text-slate-900"
+			>
+				<ArrowLeft size={18} /> Back to Resources
+			</button>
 
-      {/* Queue List */}
-      <Card>
-        <div className="p-6 space-y-3">
-          {MOCK_QUEUE.slice(0, 10).map((user, index) => (
-            <div 
-              key={user.id}
-              className="flex justify-between items-center border-b pb-2 last:border-none"
-            >
-              <span className="font-medium text-slate-700">
-                #{index + 1} {user.name}
-              </span>
-              {index === 0 && (
-                <span className="text-xs text-emerald-600 font-bold">
-                  NEXT
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
+			<div>
+				<h2 className="text-2xl font-bold text-slate-800">
+					{resource.name} Outstanding Tickets
+				</h2>
+				<p className="text-slate-500">
+					{outstandingTickets.length} tickets still pending redemption
+				</p>
+			</div>
+
+			<Card>
+				<div className="p-6 space-y-3">
+					{outstandingTickets.length === 0 ? (
+						<div className="text-slate-500">No outstanding tickets for this batch.</div>
+					) : (
+						outstandingTickets.map((ticket, index) => (
+							<div
+								key={ticket.claimId}
+								className="flex items-center justify-between border-b pb-3 last:border-none"
+							>
+								<div>
+									<div className="font-medium text-slate-800">
+										#{index + 1} Recipient {ticket.recipientId.slice(-6).toUpperCase()}
+									</div>
+									<div className="text-sm text-slate-500">
+										Claim {ticket.claimId.slice(-6).toUpperCase()}
+									</div>
+								</div>
+
+								<div className="text-right">
+									<div className="flex items-center gap-2 text-sm text-slate-700 justify-end">
+										<Clock size={14} />
+										{new Date(ticket.expiresAt).toLocaleString()}
+									</div>
+								</div>
+							</div>
+						))
+					)}
+				</div>
+			</Card>
+		</div>
+	);
 }

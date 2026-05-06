@@ -40,7 +40,9 @@ export default function DistributorView({ setActivePage }) {
             status: item.fields?.status || "Public",
             total: batch ? batch.total_qty : 0,           // Total minted
             remaining: batch ? batch.available_qty : 0,   // Currently left
-            unit: item.fields?.unit || "Units"
+            unit: item.fields?.unit || "Units",
+            ticketBatchId: batch?._id || null,
+            recipientExpirations: batch?.recipient_expirations || {}
           };
         });
 
