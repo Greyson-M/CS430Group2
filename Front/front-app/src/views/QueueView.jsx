@@ -57,7 +57,7 @@ export default function QueueView({ resource, onBack }) {
 								<div className="text-right">
 									<div className="flex items-center gap-2 text-sm text-slate-700 justify-end">
 										<Clock size={14} />
-										{new Date(ticket.expiresAt).toLocaleString()}
+										{ticket.expiresAt.toLocaleString()}
 									</div>
 								</div>
 							</div>

@@ -50,6 +50,22 @@ def build_ticket_payload(ticket_id, item_id, item_name, wanter_id, vendor_id, ex
 def get_ticket_claim(ticket_data, compact_key, legacy_key):
     return ticket_data.get(compact_key, ticket_data.get(legacy_key))
 
+def serialize_recipient_expirations(recipient_expirations):
+    serialized = {}
+
+    for recipient_id, claims in (recipient_expirations or {}).items():
+        serialized[recipient_id] = {}
+
+        for claim_id, expires_at in (claims or {}).items():
+            if isinstance(expires_at, datetime.datetime):
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+                serialized[recipient_id][claim_id] = expires_at.isoformat().replace("+00:00", "Z")
+            else:
+                serialized[recipient_id][claim_id] = expires_at
+
+    return serialized
+
 
 app = Flask(__name__)
 CORS(app)
@@ -609,6 +625,8 @@ def get_ticket_batches():
                 ticket['vendor_id'] = str(ticket['vendor_id'])  # Convert ObjectId to string for JSON serialization
             if 'item_id' in ticket and ticket['item_id'] is not None:
                 ticket['item_id'] = str(ticket['item_id'])  # Convert ObjectId to string for JSON serialization
+            if 'recipient_expirations' in ticket and ticket['recipient_expirations'] is not None:
+                ticket['recipient_expirations'] = serialize_recipient_expirations(ticket['recipient_expirations'])
             tickets.append(ticket)
         
         return jsonify(tickets), 200

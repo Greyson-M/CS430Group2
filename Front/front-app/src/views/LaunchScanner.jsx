@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, Camera, Upload, ArrowLeft, Wifi, WifiOff, Send, Trash2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { QrCode, Camera, ArrowLeft, Wifi, WifiOff, Send, Trash2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
 import QrScanner from 'qr-scanner';
 
@@ -48,7 +48,6 @@ function normalizeTicketClaims(decodedPayload) {
 
 export default function LaunchScanner({ onBack }) {
   const [scanning, setScanning] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState(null);
   const [scanError, setScanError] = useState(null);
   const [ledger, setLedger] = useState(loadLedger);
@@ -214,44 +213,6 @@ export default function LaunchScanner({ onBack }) {
     setScanError(null);
     setScanning(true);
   };
-
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    console.log('[LaunchScanner] Starting uploaded image scan.', {
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: file.type,
-      cameraActive: scanning
-    });
-
-    setUploading(true);
-    setScanError(null);
-
-    try {
-      const result = await QrScanner.scanImage(file, {
-        returnDetailedScanResult: true
-      });
-
-      console.log('[LaunchScanner] Uploaded image scan succeeded.', {
-        payloadLength: result.data.length,
-        cornersDetected: result.cornerPoints.length
-      });
-
-      processScannedPayloadRef.current?.(result.data, 'file');
-      setScanning(false);
-    } catch (error) {
-      console.error('[LaunchScanner] Uploaded image scan failed.', error);
-      const errorMessage = getErrorMessage(error, 'No QR code found in this image.');
-      setScanError(errorMessage);
-      alert(errorMessage);
-    } finally {
-      setUploading(false);
-      event.target.value = '';
-    }
-  };
-
   const handleManualScan = () => {
     console.log('[LaunchScanner] Manual payload scan requested.', {
       payloadLength: manualInput.trim().length
@@ -379,35 +340,26 @@ export default function LaunchScanner({ onBack }) {
             <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
               <p className="text-slate-400">
                 {cameraAvailable === false
-                  ? 'No camera detected. You can still upload a QR image or paste the ticket payload manually.'
+                  ? 'No camera detected. You can still paste the ticket payload manually.'
                   : 'Click "Start Scanner" to use the camera.'}
               </p>
             </div>
           )}
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="mb-6">
           <button
             onClick={toggleScanner}
             disabled={cameraAvailable === false}
-            className={`flex-1 flex items-center justify-center gap-2 text-white py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${scanning ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+            className={
+              'w-full flex items-center justify-center gap-2 text-white py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ' +
+              (scanning ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700')
+            }
           >
             <Camera size={18} />
             {scanning ? 'Stop Scanner' : 'Start Scanner'}
           </button>
-
-          <label className="flex-1 flex items-center justify-center gap-2 bg-slate-200 text-slate-700 py-3 rounded-xl hover:bg-slate-300 cursor-pointer">
-            <Upload size={18} />
-            {uploading ? 'Scanning Image...' : 'Upload QR Code'}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
         </div>
-
         {scanError && (
           <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 flex items-start gap-2">
             <XCircle size={16} className="mt-0.5 shrink-0" />
