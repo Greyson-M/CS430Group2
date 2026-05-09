@@ -119,6 +119,9 @@ export default function App() {
   const handleLogin = (userType) => {
     setIsAuthenticated(true);
     setRole(userType === "vendors" ? "distributor" : "recipient");
+    setShowSignup(false);
+    setShowMenu(false);
+    setActivePage({ page: 'home' });
     setTokenStatus('valid');
     setLastChecked(new Date());
   };
@@ -127,8 +130,11 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("userType");
+    localStorage.removeItem("userId");
     setIsAuthenticated(false);
-    setRole(null);
+    setRole('recipient');
+    setShowMenu(false);
+    setActivePage({ page: 'home' });
     setTokenStatus('none');
     setLastChecked(new Date());
   };
@@ -164,13 +170,15 @@ export default function App() {
         });
         if (res.ok) {
           setTokenStatus('valid');
-        } else {
-          setTokenStatus('invalid');
-          // Token is expired/invalid — log the user out
+        } else {          setTokenStatus('invalid');
+          // Token is expired or invalid, so clear the saved session.
           localStorage.removeItem('authToken');
           localStorage.removeItem('userType');
+          localStorage.removeItem('userId');
           setIsAuthenticated(false);
-          setRole(null);
+          setRole('recipient');
+          setShowMenu(false);
+          setActivePage({ page: 'home' });
         }
       } catch {
         setTokenStatus('invalid');
@@ -242,11 +250,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => {
-                setIsAuthenticated(false);
-                setActivePage({ page: "home" });
-                setShowMenu(false);
-              }}
+              onClick={handleLogout}
               className="w-full text-left px-4 py-2 hover:bg-slate-100 text-sm text-red-600"
             >
               Logout
@@ -333,7 +337,7 @@ export default function App() {
 {!isAuthenticated ? (
   showSignup ? (
     <Signup 
-      onSignup={() => handleLogin("wanters")} // or pass user_type from Signup too
+      onSignup={handleLogin}
       onSwitchToLogin={() => setShowSignup(false)}
     />
   ) : (

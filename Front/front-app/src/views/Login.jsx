@@ -2,22 +2,19 @@ import React, { useState } from "react";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
 export default function Login({ onLogin, onSwitchToSignup }) {
-  const [email, setEmail] = useState("123@123");
-  const [password, setPassword] = useState("pass");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Temporary fake authentication
-    if (email && password) {
-      if (email === "123@123" && password === "pass") {
-        alert("Login successful!");
-        onLogin("vendor");
-        return;
-      }
+    if (!email || !password) {
+      alert("Please enter both email and password");
+      return;
+    }
 
-      try {
+    try {
       const response = await fetch("/api/login", {
         method: "POST",
         headers: {
@@ -29,38 +26,25 @@ export default function Login({ onLogin, onSwitchToSignup }) {
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Invalid email or password");
+        throw new Error(data.error || data.message || "Invalid email or password");
       }
 
-      const data = await response.json();
-      console.log("Login successful, received data:", data);
-      const user_type = data.user_type;
-      const token = data.token;
-      const user_id = data.user_id;
+      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("userType", data.user_type);
+      localStorage.setItem("userId", data.user_id);
 
-      // Store the token in localStorage for future requests
-      localStorage.setItem("authToken", token);
-      localStorage.setItem("userType", user_type);
-      localStorage.setItem("userId", user_id);
-
-      // alert("Login successful!");
-      onLogin(user_type); // Tell App.js that login succeeded and pass the user type
-    } 
-    catch (error) {
+      onLogin(data.user_type);
+    } catch (error) {
       console.error("Error during login:", error);
-      alert("Login failed. Please try again.");
-    }
-    } else {
-      alert("Please enter both email and password");
+      alert(error.message || "Login failed. Please try again.");
     }
   };
 
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
       <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-200">
-        
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center mb-3">
             <ShieldCheck className="text-white" size={24} />
@@ -72,7 +56,6 @@ export default function Login({ onLogin, onSwitchToSignup }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">
               Email
@@ -117,12 +100,12 @@ export default function Login({ onLogin, onSwitchToSignup }) {
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-500">
-          Don’t have an account?{" "}
+          Don't have an account?{" "}
           <button
-            type = "button"
-            onClick = {onSwitchToSignup}
+            type="button"
+            onClick={onSwitchToSignup}
             className="text-emerald-600 font-medium hover:underline"
-          > 
+          >
             Sign Up
           </button>
         </div>

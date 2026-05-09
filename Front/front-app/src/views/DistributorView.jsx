@@ -30,22 +30,36 @@ export default function DistributorView({ setActivePage }) {
         if (!ticketsRes.ok) throw new Error("Failed to fetch tickets");
         const tickets = await ticketsRes.json();
 
-        // 3. Merge ticket data into items to get 'total' and 'remaining' quantities
-        const mergedResources = items.map(item => {
-          // Find the ticket batch associated with this item
-          const batch = tickets.find(t => t.item_id === item._id);
-          return {
-            id: item._id,
-            name: item.name,
-            provider: item.fields?.provider || "N/A",
-            status: item.fields?.status || "Public",
-            total: batch ? batch.total_qty : 0,           // Total minted
-            remaining: batch ? batch.available_qty : 0,   // Currently left
-            unit: item.fields?.unit || "Units",
-            ticketBatchId: batch?._id || null,
-            recipientExpirations: batch?.recipient_expirations || {}
-          };
-        });
+        // 3. Only render this vendor's own ticket batches, paired with their matching item.
+        const ownedItems = items.filter(item => item.vendor_id === vendorId);
+        const ownedTickets = tickets.filter(ticket => ticket.vendor_id === vendorId);
+
+        const mergedResources = ownedTickets
+          .map(batch => {
+            const item = ownedItems.find(candidate => candidate._id === batch.item_id);
+
+            if (!item) {
+              console.warn('DistributorView: skipping batch without a matching owned item.', {
+                vendorId,
+                batchId: batch._id,
+                itemId: batch.item_id
+              });
+              return null;
+            }
+
+            return {
+              id: item._id,
+              name: item.name,
+              provider: item.fields?.provider || "N/A",
+              status: item.fields?.status || "Public",
+              total: batch.total_qty,
+              remaining: batch.available_qty,
+              unit: item.fields?.unit || "Units",
+              ticketBatchId: batch._id,
+              recipientExpirations: batch.recipient_expirations || {}
+            };
+          })
+          .filter(Boolean);
 
         setResources(mergedResources);
       } catch (err) {
@@ -118,7 +132,7 @@ export default function DistributorView({ setActivePage }) {
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {resources.map(res => (
-            <Card key={res.id}>
+            <Card key={res.ticketBatchId || res.id}>
               <div className="p-6 flex flex-col md:flex-row md:items-center gap-6">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">

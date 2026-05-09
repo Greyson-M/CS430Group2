@@ -8,22 +8,34 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
     if (!name || !email || !password || !confirmPassword) {
-      alert("Please fill in all fields");
+      setError("Please fill in all fields.");
+      setLoading(false);
+      return;
+    }
+
+    if (!role) {
+      setError("Please select a role.");
+      setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      setError("Passwords do not match.");
+      setLoading(false);
       return;
     }
 
     try {
-      const response = await fetch("/api/register", {
+      const registerResponse = await fetch("/api/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -35,24 +47,43 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to register");
+      const registerData = await registerResponse.json().catch(() => ({}));
+      if (!registerResponse.ok) {
+        throw new Error(registerData.error || registerData.message || "Failed to register.");
       }
 
-      const data = await response.json();
-      // alert("Signup successful! Your user ID is: " + data.id);
-      onSignup({ name, email, password, role });
-    } catch (error) {
-      console.error("Error during signup:", error);
-      throw error;
+      const loginResponse = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: email,
+          password: password,
+        }),
+      });
+
+      const loginData = await loginResponse.json().catch(() => ({}));
+      if (!loginResponse.ok) {
+        throw new Error(loginData.error || loginData.message || "Account created, but automatic login failed.");
+      }
+
+      localStorage.setItem("authToken", loginData.token);
+      localStorage.setItem("userType", loginData.user_type);
+      localStorage.setItem("userId", loginData.user_id);
+
+      onSignup(loginData.user_type);
+    } catch (submissionError) {
+      console.error("Error during signup:", submissionError);
+      setError(submissionError.message || "Failed to create account.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="flex items-center justify-center min-h-[70vh]">
       <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-200">
-        
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center mb-3">
             <UserPlus className="text-white" size={24} />
@@ -63,8 +94,13 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
           </p>
         </div>
 
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          
           <div>
             <label className="block text-medium font-medium text-slate-700 mb-1">
               Full Name
@@ -126,8 +162,8 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
             />
           </div>
 
-          <div className ="mb-4">
-            <label className = "block text-medium font-medium text-slate-700 mb-1">Role</label>
+          <div className="mb-4">
+            <label className="block text-medium font-medium text-slate-700 mb-1">Role</label>
             <div className="flex gap-4">
               <label className="flex items-center gap-1 text-medium">
                 <input
@@ -138,7 +174,7 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
                   onChange={(e) => setRole(e.target.value)}
                   className="form-radio"
                 />
-                Resource Distributer
+                Resource Distributor
               </label>
               <label className="flex items-center gap-1 text-medium">
                 <input
@@ -156,9 +192,10 @@ export default function Signup({ onSignup, onSwitchToLogin }) {
 
           <button
             type="submit"
-            className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-500 transition shadow-lg shadow-emerald-200/50"
+            disabled={loading}
+            className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-500 transition shadow-lg shadow-emerald-200/50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Create Account
+            {loading ? "Creating Account..." : "Create Account"}
           </button>
         </form>
 
